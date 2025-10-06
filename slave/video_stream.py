@@ -146,7 +146,7 @@ def load_device_settings(device_name):
         'white_balance': 'auto',
         'jpeg_quality': 80,
         'fps': 30,
-        'resolution': '640x480',
+        'resolution': '640x360',    # WYSIWYG FIX: Changed from 640x480 (4:3) to 640x360 (16:9) to match sensor aspect ratio
         'crop_enabled': False,
         'crop_x': 0,
         'crop_y': 0,
