@@ -1,0 +1,10 @@
+pytest
+pytest-cov
+Pillow
+numpy
+scikit-image
+opencv-python
+hypothesis
+pytest-benchmark
+pytest-mock
+imagehash

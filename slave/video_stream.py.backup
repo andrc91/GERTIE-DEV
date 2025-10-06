@@ -1,0 +1,452 @@
+#!/usr/bin/env python3
+"""
+Universal Enhanced Video Stream Script
+Works for ALL cameras including rep3 - replaces all individual video_stream scripts
+Supports: crop, flip, rotation, grayscale, full camera controls
+"""
+
+import os
+import io
+import json
+import time
+import socket
+import threading
+import logging
+import datetime
+import cv2
+import numpy as np
+from picamera2 import Picamera2
+
+# Configure logging
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Import from config with robust fallback
+try:
+    import sys
+    # Add parent directory to path for shared module
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    from shared.config import MASTER_IP, VIDEO_PORT, get_slave_ports, HEARTBEAT_PORT
+    logging.info("✅ Successfully imported from shared.config")
+except ImportError as e:
+    logging.warning(f"❌ Failed to import shared.config: {e}")
+    # Fallback configuration
+    MASTER_IP = "192.168.0.200"
+    VIDEO_PORT = 5002
+    HEARTBEAT_PORT = 5003
+    
+    # Fallback get_slave_ports function
+    def get_slave_ports(ip: str):
+        """Fallback function to get slave ports"""
+        if ip == "127.0.0.1" or ip.startswith("127."):  # Local camera
+            return {
+                'control': 5011,
+                'video': 5012,
+                'video_control': 5014,
+                'still': 6010,
+                'heartbeat': 5013
+            }
+        else:  # Remote slaves
+            return {
+                'control': 5001,
+                'video': 5002,
+                'video_control': 5004,
+                'still': 6000,
+                'heartbeat': 5003
+            }
+    
+    logging.info("Using fallback configuration")
+
+# Global variables
+streaming = False
+streaming_lock = threading.Lock()
+jpeg_quality = 80
+
+# Feature flags
+FEATURE_FLAGS = {
+    'ENHANCED_CAMERA_CONTROLS': True,
+    'CROP_AND_TRANSFORM': True,
+    'ROTATION_SUPPORT': True,
+    'PERFORMANCE_OPTIMIZATION': True
+}
+
+# Universal camera settings - imported from still_capture module
+def get_camera_settings():
+    """Get camera settings from still_capture module"""
+    try:
+        from still_capture_universal import camera_settings
+        return camera_settings
+    except ImportError:
+        # Fallback settings if import fails
+        return {
+            'brightness': 50,
+            'contrast': 50,
+            'iso': 100,
+            'saturation': 50,
+            'white_balance': 'auto',
+            'fps': 30,
+            'resolution': '640x480',
+            'crop_enabled': False,
+            'crop_x': 0,
+            'crop_y': 0,
+            'crop_width': 640,
+            'crop_height': 480,
+            'flip_horizontal': False,
+            'flip_vertical': False,
+            'grayscale': False,
+            'rotation': 0
+        }
+
+def apply_all_transforms(image_array):
+    """Apply crop, flip, rotation, and grayscale transforms to video frame"""
+    try:
+        camera_settings = get_camera_settings()
+        
+        # Start with BGR format (OpenCV standard)
+        image = image_array
+        
+        # Step 1: Apply crop if enabled
+        if camera_settings.get('crop_enabled', False):
+            image = apply_crop(image, camera_settings)
+        
+        # Step 2: Apply rotation
+        rotation = camera_settings.get('rotation', 0)
+        if rotation != 0:
+            image = apply_rotation(image, rotation)
+        
+        # Step 3: Apply flips
+        if camera_settings.get('flip_horizontal', False):
+            image = cv2.flip(image, 1)  # Horizontal flip
+        
+        if camera_settings.get('flip_vertical', False):
+            image = cv2.flip(image, 0)  # Vertical flip
+        
+        # Step 4: Apply grayscale
+        if camera_settings.get('grayscale', False):
+            if len(image.shape) == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                # Convert back to 3-channel for consistency
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        
+        return image
+        
+    except Exception as e:
+        logging.error(f"Error applying video transforms: {e}")
+        return image_array  # Return original if processing fails
+
+def apply_crop(image, camera_settings):
+    """Apply crop to video frame"""
+    try:
+        x = camera_settings.get('crop_x', 0)
+        y = camera_settings.get('crop_y', 0)
+        w = camera_settings.get('crop_width', image.shape[1])
+        h = camera_settings.get('crop_height', image.shape[0])
+        
+        # Scale crop coordinates to video resolution
+        height, width = image.shape[:2]
+        
+        # Convert from full sensor coordinates to video coordinates
+        scale_x = width / 4608.0  # Full sensor width
+        scale_y = height / 2592.0  # Full sensor height
+        
+        scaled_x = int(x * scale_x)
+        scaled_y = int(y * scale_y)
+        scaled_w = int(w * scale_x)
+        scaled_h = int(h * scale_y)
+        
+        # Validate crop bounds
+        scaled_x = max(0, min(scaled_x, width - 10))
+        scaled_y = max(0, min(scaled_y, height - 10))
+        scaled_w = max(10, min(scaled_w, width - scaled_x))
+        scaled_h = max(10, min(scaled_h, height - scaled_y))
+        
+        # Apply crop
+        return image[scaled_y:scaled_y+scaled_h, scaled_x:scaled_x+scaled_w]
+        
+    except Exception as e:
+        logging.error(f"Error applying video crop: {e}")
+        return image
+
+def apply_rotation(image, degrees):
+    """Apply rotation to video frame"""
+    try:
+        if degrees == 90:
+            # 90 degrees clockwise
+            image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        elif degrees == 180:
+            # 180 degrees
+            image = cv2.rotate(image, cv2.ROTATE_180)
+        elif degrees == 270:
+            # 270 degrees clockwise (90 counterclockwise)
+            image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        # 0 degrees or invalid - no rotation
+        
+        return image
+        
+    except Exception as e:
+        logging.error(f"Error applying video rotation: {e}")
+        return image
+
+def build_camera_controls():
+    """Build Picamera2 controls from camera settings"""
+    camera_settings = get_camera_settings()
+    controls = {"FrameRate": camera_settings.get('fps', 30)}
+    
+    try:
+        # Basic image controls
+        if camera_settings.get('brightness', 50) != 50:
+            controls["Brightness"] = (camera_settings['brightness'] - 50) / 50.0
+        
+        if camera_settings.get('contrast', 50) != 50:
+            controls["Contrast"] = camera_settings['contrast'] / 50.0
+            
+        if camera_settings.get('saturation', 50) != 50:
+            controls["Saturation"] = camera_settings['saturation'] / 50.0
+        
+        # ISO/Gain controls
+        if camera_settings.get('iso', 100) != 100:
+            controls["AnalogueGain"] = camera_settings['iso'] / 100.0
+        
+        # White balance
+        wb_mode = camera_settings.get('white_balance', 'auto')
+        if wb_mode == 'auto':
+            controls["AwbEnable"] = True
+        else:
+            controls["AwbEnable"] = False
+            # Predefined color gains for different WB modes
+            wb_gains = {
+                'daylight': (1.5, 1.2),
+                'cloudy': (1.8, 1.0),
+                'tungsten': (1.0, 2.0),
+                'fluorescent': (1.8, 1.5)
+            }
+            if wb_mode in wb_gains:
+                controls["ColourGains"] = wb_gains[wb_mode]
+        
+        logging.info(f"Applied video camera controls: {controls}")
+        
+    except Exception as e:
+        logging.warning(f"Error building camera controls: {e}")
+    
+    return controls
+
+def get_video_resolution():
+    """Get video resolution from settings"""
+    try:
+        camera_settings = get_camera_settings()
+        resolution_str = camera_settings.get('resolution', '640x480')
+        width, height = map(int, resolution_str.split('x'))
+        return (width, height)
+    except:
+        return (640, 480)
+
+def start_stream():
+    """Enhanced video stream with universal transforms"""
+    global streaming, jpeg_quality
+    
+    with streaming_lock:
+        if streaming:
+            logging.warning("Video stream already running")
+            return
+        streaming = True
+
+    picam2 = None
+    sock = None
+
+    try:
+        # Initialize camera
+        picam2 = Picamera2()
+        
+        # Configure with camera settings
+        video_config = picam2.create_video_configuration(
+            main={"size": get_video_resolution(), "format": "RGB888"},
+            controls=build_camera_controls()
+        )
+        picam2.configure(video_config)
+        picam2.start()
+        
+        # Let camera settle
+        time.sleep(2.0)
+        
+        # Setup UDP socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        
+        logging.info(f"Video streaming started to {MASTER_IP}:{VIDEO_PORT}")
+        
+        # Main streaming loop
+        frame_count = 0
+        last_time = time.time()
+        
+        while True:
+            with streaming_lock:
+                if not streaming:
+                    logging.info("Stream stop requested, breaking loop")
+                    break
+            
+            try:
+                # Capture frame
+                frame = picam2.capture_array()
+                
+                # Convert RGB to BGR for OpenCV
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                
+                # Apply all transforms (crop, rotation, flip, grayscale)
+                frame = apply_all_transforms(frame)
+                
+                # Encode as JPEG
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
+                success, encoded = cv2.imencode(".jpg", frame, encode_params)
+                
+                if success:
+                    frame_data = encoded.tobytes()
+                    sock.sendto(frame_data, (MASTER_IP, VIDEO_PORT))
+                    
+                    # Performance monitoring
+                    frame_count += 1
+                    if frame_count % 300 == 0:  # Every 10 seconds at 30fps
+                        current_time = time.time()
+                        actual_fps = 300 / (current_time - last_time)
+                        logging.info(f"Video streaming: {actual_fps:.1f} fps, frame size: {len(frame_data)} bytes")
+                        last_time = current_time
+                
+                # Frame rate control
+                if FEATURE_FLAGS.get('PERFORMANCE_OPTIMIZATION', True):
+                    time.sleep(0.033)  # ~30 FPS
+                else:
+                    time.sleep(0.05)   # ~20 FPS
+                
+            except Exception as e:
+                logging.error(f"Error in video streaming loop: {e}")
+                break
+                
+    except Exception as e:
+        logging.error(f"Critical error in video streaming: {e}")
+        
+    finally:
+        # Cleanup
+        if picam2:
+            try:
+                picam2.stop()
+                picam2.close()
+            except:
+                pass
+                
+        if sock:
+            try:
+                sock.close()
+            except:
+                pass
+                
+        with streaming_lock:
+            streaming = False
+        
+        logging.info("Video stream stopped")
+
+def stop_stream():
+    """Stop video streaming"""
+    global streaming
+    
+    with streaming_lock:
+        if not streaming:
+            logging.info("Video stream not running")
+            return
+        streaming = False
+    
+    logging.info("Video stream stop requested")
+
+def restart_stream():
+    """Restart video stream with new settings"""
+    logging.info("Restarting video stream with new settings...")
+    
+    # Stop current stream
+    stop_stream()
+    
+    # Wait for stream to stop
+    time.sleep(2.0)
+    
+    # Start new stream
+    threading.Thread(target=start_stream, daemon=True).start()
+
+def handle_video_commands():
+    """Handle video-specific commands"""
+    global streaming, jpeg_quality
+    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    try:
+        # Get port for this device
+        local_ip = socket.gethostbyname(socket.gethostname())
+        ports = get_slave_ports(local_ip)
+        video_control_port = ports['video_control']
+        
+        sock.bind(("0.0.0.0", video_control_port))
+        logging.info(f"Video command handler listening on port {video_control_port}")
+    except OSError as e:
+        logging.error(f"Failed to bind video command port: {e}")
+        return
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(1024)
+            command = data.decode().strip()
+            logging.info(f"Video command received: {command}")
+
+            if command == "START_STREAM":
+                if not streaming:
+                    threading.Thread(target=start_stream, daemon=True).start()
+                
+            elif command == "STOP_STREAM":
+                stop_stream()
+                
+            elif command == "RESTART_STREAM_WITH_SETTINGS":
+                restart_stream()
+                
+            elif command.startswith("SET_QUALITY_"):
+                try:
+                    quality = int(command.split('_')[2])
+                    if 20 <= quality <= 100:
+                        jpeg_quality = quality
+                        logging.info(f"JPEG quality set to {quality}")
+                except:
+                    logging.error(f"Invalid quality command: {command}")
+                    
+        except Exception as e:
+            logging.error(f"Error handling video command: {e}")
+
+def send_video_heartbeat():
+    """Send heartbeat to master GUI from the video process."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            while True:
+                try:
+                    sock.sendto(b"HEARTBEAT", (MASTER_IP, HEARTBEAT_PORT))
+                    time.sleep(1.0)
+                except Exception as e:
+                    logging.error(f"Video heartbeat send error: {e}")
+                    time.sleep(1.0)
+    except Exception as e:
+        logging.error(f"Video heartbeat socket error: {e}")
+
+def main():
+    """Main function"""
+    logging.info("Starting universal video stream service...")
+    
+    try:
+        # Start heartbeat and video command handler
+        threading.Thread(target=send_video_heartbeat, daemon=True).start()
+        threading.Thread(target=handle_video_commands, daemon=True).start()
+        
+        # Keep main thread alive
+        while True:
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        logging.info("Video stream service stopped")
+        stop_stream()
+    except Exception as e:
+        logging.error(f"Error in video main: {e}")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,4 @@
+# file: /Users/andrew1/Desktop/camera_system_integrated_final/shared/transforms.py
+# hypothesis_version: 6.138.15
+
+[100, 180, 270, 2592, 4608, '/home/andrc1', '127.0.0.1', '192.168.0.200', '192.168.0.201', '192.168.0.202', '192.168.0.203', '192.168.0.204', '192.168.0.205', '192.168.0.206', '192.168.0.207', '4608x2592', 'auto', 'brightness', 'call_count', 'contrast', 'crop', 'crop_enabled', 'crop_height', 'crop_width', 'crop_x', 'crop_y', 'flipH', 'flipV', 'flip_horizontal', 'flip_vertical', 'fps', 'grayscale', 'iso', 'jpeg_quality', 'localhost', 'r', 'rep1', 'rep2', 'rep3', 'rep4', 'rep5', 'rep6', 'rep7', 'rep8', 'resolution', 'rotation', 'saturation', 'w', 'white_balance']

@@ -1,0 +1,22 @@
+{
+  "brightness": 50,
+  "contrast": 50,
+  "iso": 100,
+  "shutter_speed": 1000,
+  "saturation": 50,
+  "white_balance": "auto",
+  "exposure_mode": "auto",
+  "jpeg_quality": 80,
+  "fps": 30,
+  "resolution": "640x480",
+  "image_format": "JPEG",
+  "crop_enabled": false,
+  "crop_x": 0,
+  "crop_y": 0,
+  "crop_width": 4608,
+  "crop_height": 2592,
+  "flip_horizontal": false,
+  "flip_vertical": false,
+  "grayscale": false,
+  "rotation": 0
+}
