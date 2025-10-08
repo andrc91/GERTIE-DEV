@@ -144,7 +144,7 @@ def load_device_settings(device_name):
         'iso': 100,
         'saturation': 50,
         'white_balance': 'auto',
-        'jpeg_quality': 80,
+        'jpeg_quality': 50,  # WYSIWYG FIX: Matches global setting
         'fps': 30,
         'resolution': '640x360',    # WYSIWYG FIX: Changed from 640x480 (4:3) to 640x360 (16:9) to match sensor aspect ratio
         'crop_enabled': False,
@@ -632,7 +632,7 @@ def handle_factory_reset_fixed(device_name):
             'iso': 100,
             'saturation': 50,
             'white_balance': 'auto',
-            'jpeg_quality': 80,
+            'jpeg_quality': 50,  # WYSIWYG FIX: Matches global setting
             'fps': 30,
             'resolution': '640x480',
             'crop_enabled': False,
