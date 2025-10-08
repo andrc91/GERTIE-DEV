@@ -387,12 +387,6 @@ def start_stream():
             controls=camera_controls
         )
         picam2.configure(video_config)
-        
-        # Set ScalerCrop to use full sensor - prevents center crop/zoom
-        # Sensor size: 4608x2592, this ensures we scale down from full sensor, not crop
-        with picam2.controls as ctrl:
-            ctrl.ScalerCrop = (0, 0, 4608, 2592)
-        
         picam2.start()
         
         logging.info(f"[VIDEO] ✅ Camera hardware initialized for {device_name}")
