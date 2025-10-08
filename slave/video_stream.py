@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 80
+jpeg_quality = 50  # FIXED: Reduced from 80 to fit UDP 65KB limit at 640x360
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -225,12 +225,20 @@ def apply_frame_transforms(image_array, device_name):
         
         # Apply transforms in order: crop -> rotation -> flips -> grayscale
         
-        # 1. Crop
+        # 1. Crop (WYSIWYG FIX: Scale coordinates from sensor resolution to preview resolution)
         if settings.get('crop_enabled', False):
-            x = max(0, settings.get('crop_x', 0))
-            y = max(0, settings.get('crop_y', 0))
-            w = max(100, settings.get('crop_width', image.shape[1]))
-            h = max(100, settings.get('crop_height', image.shape[0]))
+            # Crop coords are stored in sensor resolution (4608x2592)
+            # Scale to current frame resolution (640x360)
+            height, width = image.shape[:2]
+            SENSOR_WIDTH, SENSOR_HEIGHT = 4608, 2592
+            scale_x = width / SENSOR_WIDTH
+            scale_y = height / SENSOR_HEIGHT
+            
+            # Scale crop coordinates
+            x = int(max(0, settings.get('crop_x', 0)) * scale_x)
+            y = int(max(0, settings.get('crop_y', 0)) * scale_y)
+            w = int(max(100, settings.get('crop_width', width / scale_x)) * scale_x)
+            h = int(max(100, settings.get('crop_height', height / scale_y)) * scale_y)
             
             height, width = image.shape[:2]
             x = min(x, width - 100)
