@@ -284,9 +284,9 @@ def build_camera_controls(device_name):
         # Apply brightness to camera hardware (0 is valid neutral value)
         brightness = settings.get('brightness', 0)
         
-        if brightness != 50:
-            controls["Brightness"] = (brightness - 50) / 50.0
-            logging.info(f"[CAMERA] Hardware brightness for {device_name}: {brightness}")
+        if brightness != 0:  # New scale: -50 to +50, 0 = neutral (matches still_capture.py)
+            controls["Brightness"] = brightness / 50.0  # New formula: direct division
+            logging.info(f"[CAMERA] Hardware brightness for {device_name}: GUI={brightness} → libcamera={brightness/50.0:.2f}")
         
         # Other camera controls
         contrast = settings.get('contrast', 50)
