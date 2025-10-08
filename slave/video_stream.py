@@ -281,11 +281,8 @@ def build_camera_controls(device_name):
         
         controls = {"FrameRate": settings.get('fps', 30)}
         
-        # WYSIWYG FIX: Set ScalerCrop to full sensor for proper preview scaling
-        # This ensures video preview shows FULL frame (not zoomed center crop)
-        # Full HQ camera sensor: 4608x2592, then scales to video resolution (640x480)
-        controls["ScalerCrop"] = (0, 0, 4608, 2592)  # (x, y, width, height) - FULL SENSOR
-        logging.info(f"[CAMERA] WYSIWYG: ScalerCrop set to full sensor (0, 0, 4608, 2592)")
+        # Note: WYSIWYG handled by raw sensor config in create_video_configuration
+        # No need to set ScalerCrop here - full sensor usage forced via raw parameter
         
         # Apply brightness to camera hardware (0 is valid neutral value)
         brightness = settings.get('brightness', 0)
@@ -375,10 +372,13 @@ def start_stream():
         logging.info(f"[VIDEO] - Frame transforms: Applied per-frame separately")
         
         # Configure camera with ONLY hardware controls
+        # WYSIWYG FIX v2: Use raw (sensor) config to force full sensor usage
         video_config = picam2.create_video_configuration(
             main={"size": resolution, "format": "RGB888"},
+            raw={"size": (4608, 2592)},  # Force full HQ sensor - prevents center crop
             controls=camera_controls
         )
+        logging.info(f"[VIDEO] WYSIWYG v2: Using full sensor (4608x2592) → scaled to {resolution}")
         picam2.configure(video_config)
         picam2.start()
         
