@@ -235,10 +235,14 @@ def start_local_video_stream():
         logging.info("Initializing camera...")
         picam2 = Picamera2()
         
+        # WYSIWYG FIX: Use raw (sensor) config to force full sensor usage
+        # Matches remote slaves (video_stream.py) - prevents center crop
         video_config = picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
+            raw={"size": (4608, 2592)},  # Force full HQ sensor - prevents center crop
             controls={"FrameRate": 15}
         )
+        logging.info("[LOCAL] WYSIWYG: Using full sensor (4608x2592) → scaled to (640, 480)")
         picam2.configure(video_config)
         picam2.start()
         
