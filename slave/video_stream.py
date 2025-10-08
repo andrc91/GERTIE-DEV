@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 80
+jpeg_quality = 30  # Reduced for UDP packet size (preview quality)
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -281,11 +281,8 @@ def build_camera_controls(device_name):
         
         controls = {"FrameRate": settings.get('fps', 30)}
         
-        # CRITICAL: Apply brightness to camera hardware only
-        brightness = settings.get('brightness', 50)
-        if brightness == 0:
-            logging.error(f"[CAMERA] CRITICAL: brightness=0 detected for {device_name}, using 50")
-            brightness = 50
+        # Apply brightness to camera hardware (0 is valid neutral value)
+        brightness = settings.get('brightness', 0)
         
         if brightness != 50:
             controls["Brightness"] = (brightness - 50) / 50.0
