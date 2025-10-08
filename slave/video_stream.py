@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 10  # Aggressively reduced for UDP packet size - targets 5-8KB frames
+jpeg_quality = 35  # Balanced quality/size - improved from 10 (too low) but still UDP-safe (~8-12KB frames)
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -280,6 +280,12 @@ def build_camera_controls(device_name):
         logging.info(f"[CAMERA] Building hardware controls for {device_name}")
         
         controls = {"FrameRate": settings.get('fps', 30)}
+        
+        # WYSIWYG FIX: Set ScalerCrop to full sensor for proper preview scaling
+        # This ensures video preview shows FULL frame (not zoomed center crop)
+        # Full HQ camera sensor: 4608x2592, then scales to video resolution (640x480)
+        controls["ScalerCrop"] = (0, 0, 4608, 2592)  # (x, y, width, height) - FULL SENSOR
+        logging.info(f"[CAMERA] WYSIWYG: ScalerCrop set to full sensor (0, 0, 4608, 2592)")
         
         # Apply brightness to camera hardware (0 is valid neutral value)
         brightness = settings.get('brightness', 0)
