@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 80  # GOLDEN REFERENCE: Proven working value for all 8 cameras
+jpeg_quality = 30  # UDP-SAFE: Guaranteed small packets, prevents "Message too long" errors
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
