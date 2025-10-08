@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 30  # UDP-SAFE: Guaranteed small packets, prevents "Message too long" errors
+jpeg_quality = 80
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -144,9 +144,9 @@ def load_device_settings(device_name):
         'iso': 100,
         'saturation': 50,
         'white_balance': 'auto',
-        'jpeg_quality': 80,  # GOLDEN REFERENCE: Proven working value
+        'jpeg_quality': 80,
         'fps': 30,
-        'resolution': '640x480',  # GOLDEN REFERENCE: Original resolution
+        'resolution': '640x480',
         'crop_enabled': False,
         'crop_x': 0,
         'crop_y': 0,
@@ -225,20 +225,12 @@ def apply_frame_transforms(image_array, device_name):
         
         # Apply transforms in order: crop -> rotation -> flips -> grayscale
         
-        # 1. Crop (WYSIWYG FIX: Scale coordinates from sensor resolution to preview resolution)
+        # 1. Crop
         if settings.get('crop_enabled', False):
-            # Crop coords are stored in sensor resolution (4608x2592)
-            # Scale to current frame resolution (640x360)
-            height, width = image.shape[:2]
-            SENSOR_WIDTH, SENSOR_HEIGHT = 4608, 2592
-            scale_x = width / SENSOR_WIDTH
-            scale_y = height / SENSOR_HEIGHT
-            
-            # Scale crop coordinates
-            x = int(max(0, settings.get('crop_x', 0)) * scale_x)
-            y = int(max(0, settings.get('crop_y', 0)) * scale_y)
-            w = int(max(100, settings.get('crop_width', width / scale_x)) * scale_x)
-            h = int(max(100, settings.get('crop_height', height / scale_y)) * scale_y)
+            x = max(0, settings.get('crop_x', 0))
+            y = max(0, settings.get('crop_y', 0))
+            w = max(100, settings.get('crop_width', image.shape[1]))
+            h = max(100, settings.get('crop_height', image.shape[0]))
             
             height, width = image.shape[:2]
             x = min(x, width - 100)
@@ -380,8 +372,6 @@ def start_stream():
         logging.info(f"[VIDEO] - Frame transforms: Applied per-frame separately")
         
         # Configure camera with ONLY hardware controls
-        # CRITICAL FIX: Use full sensor area (no center crop) for video stream
-        # This ensures video preview matches the full field of view of still captures
         video_config = picam2.create_video_configuration(
             main={"size": resolution, "format": "RGB888"},
             controls=camera_controls
@@ -634,9 +624,9 @@ def handle_factory_reset_fixed(device_name):
             'iso': 100,
             'saturation': 50,
             'white_balance': 'auto',
-            'jpeg_quality': 80,  # GOLDEN REFERENCE: Proven working value
+            'jpeg_quality': 80,
             'fps': 30,
-            'resolution': '640x480',  # GOLDEN REFERENCE: Original resolution
+            'resolution': '640x480',
             'crop_enabled': False,
             'crop_x': 0,
             'crop_y': 0,
