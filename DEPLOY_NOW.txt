@@ -1,0 +1,99 @@
+# Ready for Deployment - WYSIWYG Video Preview Fix
+
+**Date**: 2025-10-08 09:15 BST  
+**Branch**: master  
+**Commits**: 
+- dc46a0d Fix: Update default JPEG quality settings to 50
+- d79218e Fix: WYSIWYG video preview - reduce JPEG quality to 50 for UDP, scale crop coords
+
+---
+
+## Problems Fixed:
+
+### 1. UDP "Message too long" Error (rep1-rep7)
+**Issue**: JPEG quality 80 at 640x360 created frames >65KB, exceeding UDP datagram limit  
+**Fix**: Reduced JPEG quality from 80 to 50  
+**Result**: Frames now <65KB, should transmit over UDP successfully
+
+### 2. Video Preview Cropping Mismatch
+**Issue**: Crop coordinates stored in sensor resolution (4608x2592) but applied directly to preview (640x360)  
+**Fix**: Added coordinate scaling: scale_x = 640/4608, scale_y = 360/2592  
+**Result**: Crop box in preview now matches captured image crop
+
+### 3. Brightness=0 Default Issue
+**Note**: Still seeing "brightness=0" warnings - investigate in next iteration
+
+---
+
+## USB Deployment Steps:
+
+1. **Copy to USB**:
+   ```bash
+   # On MacBook
+   cp -R ~/Desktop/camera_system_integrated_final /Volumes/USB_DRIVE/
+   ```
+
+2. **Deploy on control1**:
+   ```bash
+   # On control1 (Raspberry Pi)
+   cd /home/andrc1
+   cp -R /media/usb/camera_system_integrated_final ./
+   cd camera_system_integrated_final
+   chmod +x sync_to_slaves.sh run_gui_with_logging.sh
+   ./sync_to_slaves.sh
+   ```
+
+3. **Test**:
+   ```bash
+   ./run_gui_with_logging.sh
+   ```
+
+4. **Copy log back**:
+   ```bash
+   # After testing, copy log to USB
+   cp /home/andrc1/Desktop/updatelog.txt /media/usb/
+   ```
+
+---
+
+## Expected Results:
+
+✅ **All 8 cameras show video preview** (rep1-rep7 should work now, not just rep8)  
+✅ **Video preview aspect ratio matches capture** (both 16:9)  
+✅ **Crop box in preview aligns with captured image** (WYSIWYG)  
+✅ **No "Message too long" UDP errors** in log
+
+## Test Checklist:
+
+- [ ] Start all streams - verify all 8 cameras show live video
+- [ ] Capture images from all cameras - verify high resolution JPEGs saved
+- [ ] Enable crop on one camera - verify preview crop matches capture crop
+- [ ] Check log for "Message too long" errors - should be ZERO
+- [ ] Verify captured images are 4608x2592 (full sensor resolution)
+- [ ] Verify video preview is smooth (not stuttering)
+
+---
+
+## Log Analysis After Test:
+
+Check for:
+```bash
+# Should see ZERO of these:
+grep "Message too long" ~/Desktop/updatelog.txt
+
+# Should see video streams starting on all cameras:
+grep "Started video_stream.service" ~/Desktop/updatelog.txt | wc -l  # Should be 8
+
+# Check for remaining brightness errors:
+grep "brightness=0" ~/Desktop/updatelog.txt
+```
+
+---
+
+## Next Iteration (if needed):
+
+- Fix brightness=0 default value issue
+- Test interactive crop adjustment in GUI
+- Verify coordinate scaling on all cameras
+- Measure frame transmission success rate
+
