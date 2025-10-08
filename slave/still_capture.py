@@ -29,8 +29,8 @@ except ImportError as e:
     logging.warning(f"❌ Failed to import shared.config: {e}")
     # Fallback configuration
     MASTER_IP = "192.168.0.200"
-    CONTROL_PORT = 6000
-    STILL_PORT = 6000
+    CONTROL_PORT = 5001  # FIXED: Commands on 5001
+    STILL_PORT = 6000    # Image data on 6000
     HEARTBEAT_PORT = 5003
     
     # Fallback get_slave_ports function
@@ -39,7 +39,7 @@ except ImportError as e:
         if ip == "127.0.0.1" or ip.startswith("127."):
             return {"control": 5011, "video": 5012, "video_control": 5014, "still": 6010, "heartbeat": 5013}
         else:
-            return {"control": 6000, "video": 5002, "video_control": 5004, "still": 6000, "heartbeat": 5003}
+            return {"control": 5001, "video": 5002, "video_control": 5004, "still": 6000, "heartbeat": 5003}  # FIXED: control=5001 for commands, still=6000 for data
     
     logging.info("Using fallback configuration")
 # Import from config
@@ -48,8 +48,8 @@ try:
 except ImportError:
     # Fallback if config import fails
     MASTER_IP = "192.168.0.200"
-    CONTROL_PORT = 6000
-    STILL_PORT = 6000
+    CONTROL_PORT = 5001  # FIXED: Commands on 5001
+    STILL_PORT = 6000    # Image data on 6000
     HEARTBEAT_PORT = 5003
 
 # Directories - Fixed for Pi environment
@@ -73,7 +73,7 @@ camera_settings = {
     'saturation': 50,           # 0-100 (50 = neutral)
     'white_balance': 'auto',    # auto/daylight/cloudy/tungsten/etc
     'exposure_mode': 'auto',    # auto/manual/night/etc
-    'jpeg_quality': 95,         # Keep high quality for stills 
+    'jpeg_quality': 80,         # Match working rep8 quality (was 95, caused white images) 
     'fps': 30,                  # frame rate
     'resolution': '4608x2592',  # Keep explicit high resolution
     'image_format': 'JPEG',     # JPEG/PNG/BMP/TIFF
@@ -99,7 +99,7 @@ ORIGINAL_DEFAULTS = {
     'saturation': 50,
     'white_balance': 'auto',
     'exposure_mode': 'auto',
-    'jpeg_quality': 95,         # Keep high quality
+    'jpeg_quality': 80,         # Match working rep8 quality
     'fps': 30,
     'resolution': '4608x2592',  # Keep explicit high resolution
     'image_format': 'JPEG',
@@ -300,7 +300,7 @@ def capture_with_libcamera(filename):
         subprocess.run(command, timeout=15, check=True)
         if os.path.exists(filename):
             file_size = os.path.getsize(filename)
-            jpeg_quality = camera_settings.get('jpeg_quality', 95)
+            jpeg_quality = camera_settings.get('jpeg_quality', 80)  # Match rep8
             logging.info(f"[SLAVE] ✅ HIGH RES standard image saved: {filename} ({file_size} bytes, Q={jpeg_quality}%)")
             return filename
         else:
@@ -319,7 +319,7 @@ def build_libcamera_settings():
     # Adding explicit size parameters was BREAKING high resolution capture
     
     # CRITICAL FIX: Set high JPEG quality for still captures  
-    jpeg_quality = camera_settings.get('jpeg_quality', 95)
+    jpeg_quality = camera_settings.get('jpeg_quality', 80)  # Match working rep8
     settings.extend(["--quality", str(jpeg_quality)])
     logging.info(f"[STILL] JPEG Quality: {jpeg_quality}% (NO size params - libcamera default HIGH RES)")
     
