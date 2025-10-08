@@ -416,7 +416,7 @@ def capture_still():
                     logging.info(f"[SLAVE] Sent MULTIPLE STOP_STREAM commands to port {video_control_port}")
                 
                 # EXTENDED wait for video stream to completely stop
-                time.sleep(3.0)  # Increased from 1.5 seconds
+                time.sleep(8.0)  # CRITICAL FIX: Increased to 8 sec for camera resource release
                 logging.info("[SLAVE] Extended wait for video stream to COMPLETELY stop")
         except Exception as e:
             logging.warning(f"[SLAVE] Unable to send STOP_STREAM before capture: {e}")
