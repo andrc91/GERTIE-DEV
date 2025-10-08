@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 30  # Reduced for UDP packet size (preview quality)
+jpeg_quality = 10  # Aggressively reduced for UDP packet size - targets 5-8KB frames
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
