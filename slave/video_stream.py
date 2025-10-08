@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 50  # FIXED: Reduced from 80 to fit UDP 65KB limit at 640x360
+jpeg_quality = 25  # CRITICAL FIX: Reduced to 25 to guarantee frames <65KB for UDP transmission
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -144,7 +144,7 @@ def load_device_settings(device_name):
         'iso': 100,
         'saturation': 50,
         'white_balance': 'auto',
-        'jpeg_quality': 50,  # WYSIWYG FIX: Matches global setting
+        'jpeg_quality': 25,  # CRITICAL FIX: Reduced to 25 to guarantee UDP transmission
         'fps': 30,
         'resolution': '640x360',    # WYSIWYG FIX: Changed from 640x480 (4:3) to 640x360 (16:9) to match sensor aspect ratio
         'crop_enabled': False,
@@ -380,11 +380,19 @@ def start_stream():
         logging.info(f"[VIDEO] - Frame transforms: Applied per-frame separately")
         
         # Configure camera with ONLY hardware controls
+        # CRITICAL FIX: Use full sensor area (no center crop) for video stream
+        # This ensures video preview matches the full field of view of still captures
         video_config = picam2.create_video_configuration(
             main={"size": resolution, "format": "RGB888"},
             controls=camera_controls
         )
         picam2.configure(video_config)
+        
+        # Set ScalerCrop to use full sensor - prevents center crop/zoom
+        # Sensor size: 4608x2592, this ensures we scale down from full sensor, not crop
+        with picam2.controls as ctrl:
+            ctrl.ScalerCrop = (0, 0, 4608, 2592)
+        
         picam2.start()
         
         logging.info(f"[VIDEO] ✅ Camera hardware initialized for {device_name}")
@@ -632,9 +640,9 @@ def handle_factory_reset_fixed(device_name):
             'iso': 100,
             'saturation': 50,
             'white_balance': 'auto',
-            'jpeg_quality': 50,  # WYSIWYG FIX: Matches global setting
+            'jpeg_quality': 25,  # CRITICAL FIX: Reduced to 25 to guarantee UDP transmission
             'fps': 30,
-            'resolution': '640x480',
+            'resolution': '640x360',  # WYSIWYG FIX: 16:9 to match sensor
             'crop_enabled': False,
             'crop_x': 0,
             'crop_y': 0,
