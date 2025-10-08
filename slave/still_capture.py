@@ -364,15 +364,15 @@ def build_camera_controls():
     # Basic image controls
     # REVERTED: Keep GUI brightness scale (-50 to +50 where 0 = neutral) that fixed flip bug
     gui_brightness = camera_settings.get('brightness', 0)  # GUI default is 0 (neutral)
-    if gui_brightness != 0:
-        # Convert GUI scale (-50 to +50) to Picamera2 scale (-1.0 to +1.0)
-        # FIXED: Ensure proper range validation
-        if -50 <= gui_brightness <= 50:
-            brightness_val = gui_brightness / 50.0
-            controls["Brightness"] = brightness_val
-            logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f}")
-        else:
-            logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
+    # CRITICAL FIX: ALWAYS set Brightness, even when 0 - this resets camera hardware state
+    # Without this, old brightness persists in camera after service restart
+    if -50 <= gui_brightness <= 50:
+        brightness_val = gui_brightness / 50.0
+        controls["Brightness"] = brightness_val
+        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f} (always set to reset camera state)")
+    else:
+        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
+        controls["Brightness"] = 0.0
     
     if camera_settings.get('contrast', 50) != 50:
         controls["Contrast"] = camera_settings['contrast'] / 50.0
