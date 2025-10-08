@@ -50,7 +50,7 @@ except ImportError as e:
 # Global variables
 streaming = False
 streaming_lock = threading.Lock()
-jpeg_quality = 25  # CRITICAL FIX: Reduced to 25 to guarantee frames <65KB for UDP transmission
+jpeg_quality = 80  # GOLDEN REFERENCE: Proven working value for all 8 cameras
 
 def get_device_name_from_ip():
     """SIMPLIFIED: Get correct device name with robust fallback"""
@@ -144,9 +144,9 @@ def load_device_settings(device_name):
         'iso': 100,
         'saturation': 50,
         'white_balance': 'auto',
-        'jpeg_quality': 25,  # CRITICAL FIX: Reduced to 25 to guarantee UDP transmission
+        'jpeg_quality': 80,  # GOLDEN REFERENCE: Proven working value
         'fps': 30,
-        'resolution': '640x360',    # WYSIWYG FIX: Changed from 640x480 (4:3) to 640x360 (16:9) to match sensor aspect ratio
+        'resolution': '640x480',  # GOLDEN REFERENCE: Original resolution
         'crop_enabled': False,
         'crop_x': 0,
         'crop_y': 0,
@@ -640,9 +640,9 @@ def handle_factory_reset_fixed(device_name):
             'iso': 100,
             'saturation': 50,
             'white_balance': 'auto',
-            'jpeg_quality': 25,  # CRITICAL FIX: Reduced to 25 to guarantee UDP transmission
+            'jpeg_quality': 80,  # GOLDEN REFERENCE: Proven working value
             'fps': 30,
-            'resolution': '640x360',  # WYSIWYG FIX: 16:9 to match sensor
+            'resolution': '640x480',  # GOLDEN REFERENCE: Original resolution
             'crop_enabled': False,
             'crop_x': 0,
             'crop_y': 0,
