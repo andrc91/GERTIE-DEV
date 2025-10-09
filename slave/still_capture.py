@@ -263,6 +263,12 @@ def capture_with_processing(filename):
         picam2.configure(still_config)
         picam2.start()
         
+        # CRITICAL FIX: Actually apply the controls to the camera hardware
+        # Without this, brightness is never applied!
+        camera_controls = build_camera_controls()
+        picam2.set_controls(camera_controls)
+        logging.info(f"[STILL] Applied camera controls: {camera_controls}")
+        
         # Let camera settle - SIMPLE timing like working slave201
         time.sleep(1)
         
