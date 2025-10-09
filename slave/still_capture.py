@@ -253,7 +253,7 @@ def capture_with_processing(filename):
         picam2 = Picamera2()
         
         # Reset camera to defaults first
-        picam2.stop_all()
+        picam2.stop()
         
         # Configure for maximum resolution still - SIMPLE like working slave201
         still_config = picam2.create_still_configuration(
