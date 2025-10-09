@@ -369,12 +369,12 @@ def build_camera_controls():
     # CRITICAL FIX: ALWAYS set Brightness, even when 0 - this resets camera hardware state
     # Without this, old brightness persists in camera after service restart
     if -50 <= gui_brightness <= 50:
-        brightness_val = gui_brightness / 50.0
+        brightness_val = (gui_brightness + 50) / 50.0  # FIXED: Correct conversion formula!
         controls["Brightness"] = brightness_val
         logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f} (always set to reset camera state)")
     else:
-        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
-        controls["Brightness"] = 0.0
+        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (1.0)")
+        controls["Brightness"] = 1.0  # FIXED: 1.0 is neutral, not 0.0!
     
     if camera_settings.get('contrast', 50) != 50:
         controls["Contrast"] = camera_settings['contrast'] / 50.0
