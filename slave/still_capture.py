@@ -324,17 +324,16 @@ def build_libcamera_settings():
     logging.info(f"[STILL] JPEG Quality: {jpeg_quality}% (NO size params - libcamera default HIGH RES)")
     
     # Apply camera settings (only if different from defaults)
-    # CRITICAL FIX: ALWAYS set brightness, even when 0 - resets camera hardware state
-    gui_brightness = camera_settings.get('brightness', 0)  # GUI scale
-    # ALWAYS set brightness (removed "if gui_brightness != 0" condition)
-    # Without this, camera hardware retains old brightness state after service restart
+    # CRITICAL FIX: ALWAYS set brightness with CORRECT conversion formula
+    gui_brightness = camera_settings.get('brightness', 0)  # GUI scale (-50 to +50, 0 = neutral)
+    # Convert GUI scale to libcamera scale: GUI -50→+50 becomes libcamera 0.0→2.0 where 1.0 = neutral
     if -50 <= gui_brightness <= 50:
-        brightness_val = gui_brightness / 50.0
+        brightness_val = (gui_brightness + 50) / 50.0  # GUI 0 → libcamera 1.0 (neutral)
         settings.extend(["--brightness", str(brightness_val)])
-        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → libcamera={brightness_val:.2f} (always set to reset hardware)")
+        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → libcamera={brightness_val:.2f} (0=neutral on GUI, 1.0=neutral on libcamera)")
     else:
-        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
-        settings.extend(["--brightness", "0.0"])
+        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (1.0)")
+        settings.extend(["--brightness", "1.0"])
     
     if camera_settings.get('contrast', 50) != 50:
         contrast_val = camera_settings['contrast'] / 50.0
