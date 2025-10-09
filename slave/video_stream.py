@@ -622,7 +622,7 @@ def handle_factory_reset_fixed(device_name):
         
         # Default settings with CORRECT brightness
         default_settings = {
-            'brightness': 50,           # NEVER 0
+            'brightness': 0,            # Neutral default (hardware will be explicitly set)
             'contrast': 50,
             'iso': 100,
             'saturation': 50,
