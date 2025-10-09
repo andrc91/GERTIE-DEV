@@ -84,17 +84,9 @@ def load_device_settings(device_name):
             with open(settings_file, 'r') as f:
                 settings = json.load(f)
             
-            # CRITICAL FIX: Migrate brightness from old scale (0-100) to GUI scale (-50 to +50)
-            brightness = settings.get('brightness', 0)
-            if brightness > 50:  # Old scale detected (0-100 where 50=neutral)
-                logging.warning(f"[BRIGHTNESS_FIX] Migrating {device_name} brightness from {brightness} (old scale) to 0 (GUI neutral)")
-                settings['brightness'] = 0  # Convert old neutral (50) to GUI neutral (0)
-                # Save the migrated settings immediately
-                save_device_settings(device_name, settings)
-            elif brightness == 50:  # Exactly 50 suggests old neutral value
-                logging.warning(f"[BRIGHTNESS_FIX] Converting {device_name} brightness 50 (old neutral) to 0 (GUI neutral)")  
-                settings['brightness'] = 0
-                save_device_settings(device_name, settings)
+            # FIXED: Removed bad migration logic that was corrupting brightness
+            # The migration was running on EVERY load and forcing brightness to 0
+            # Now we trust the saved values or use defaults
                 
             return settings
         else:
