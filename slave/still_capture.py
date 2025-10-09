@@ -242,24 +242,26 @@ def capture_image():
 def capture_with_processing(filename):
     """Capture image with full processing pipeline - SIMPLIFIED WORKING VERSION"""
     try:
+        # Close any existing camera instances first (reset state)
+        try:
+            from picamera2 import Picamera2
+            # This ensures we start fresh each time
+            Picamera2.close_all()
+        except:
+            pass
+            
         picam2 = Picamera2()
         
-        # Build camera controls
-        controls = build_camera_controls()
+        # Reset camera to defaults first
+        picam2.stop_all()
         
         # Configure for maximum resolution still - SIMPLE like working slave201
         still_config = picam2.create_still_configuration(
             main={"size": (4608, 2592)},  # Full sensor resolution
-            controls=controls
+            controls=build_camera_controls()
         )
         picam2.configure(still_config)
         picam2.start()
-        
-        # CRITICAL FIX: Actually apply brightness controls to the running camera!
-        # Without this, brightness is never sent to the hardware
-        if 'Brightness' in controls:
-            picam2.set_controls(controls)
-            logging.info(f"[SLAVE] Applied camera controls: brightness={controls.get('Brightness', 'N/A')}")
         
         # Let camera settle - SIMPLE timing like working slave201
         time.sleep(1)
@@ -369,31 +371,38 @@ def build_libcamera_settings():
     return settings
 
 def build_camera_controls():
-    """Build Picamera2 controls from settings - REVERTED: Keep working brightness conversion"""
-    controls = {"FrameRate": camera_settings.get('fps', 30)}
+    """Build Picamera2 controls from settings - Fixed brightness range for Picamera2"""
+    controls = {}
     
     # Basic image controls
-    # REVERTED: Keep GUI brightness scale (-50 to +50 where 0 = neutral) that fixed flip bug
-    gui_brightness = camera_settings.get('brightness', 0)  # GUI default is 0 (neutral)
-    if gui_brightness != 0:
-        # Convert GUI scale (-50 to +50) to Picamera2 scale (-1.0 to +1.0)
-        # FIXED: Ensure proper range validation
-        if -50 <= gui_brightness <= 50:
-            brightness_val = gui_brightness / 50.0
-            controls["Brightness"] = brightness_val
-            logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f}")
-        else:
-            logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
+    # GUI brightness scale (-50 to +50 where 0 = neutral)
+    # Picamera2 expects 0.0 to 2.0 where 1.0 is neutral
+    gui_brightness = camera_settings.get('brightness', 0)
+    
+    # Convert GUI scale (-50 to +50) to Picamera2 scale (0.0 to 2.0)
+    # Formula: (gui_value + 50) / 50 gives us 0.0 to 2.0
+    if -50 <= gui_brightness <= 50:
+        brightness_val = (gui_brightness + 50) / 50.0
+        controls["Brightness"] = brightness_val
+        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f} (1.0=neutral)")
+    else:
+        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (1.0)")
+        controls["Brightness"] = 1.0  # Neutral is 1.0, not 0
     
     if camera_settings.get('contrast', 50) != 50:
+        # Contrast: 0-100 GUI to 0.0-2.0 Picamera2 (1.0 = neutral)
         controls["Contrast"] = camera_settings['contrast'] / 50.0
         
     if camera_settings.get('saturation', 50) != 50:
+        # Saturation: 0-100 GUI to 0.0-2.0 Picamera2 (1.0 = neutral)
         controls["Saturation"] = camera_settings['saturation'] / 50.0
     
     # ISO/Gain controls
     if camera_settings.get('iso', 100) != 100:
         controls["AnalogueGain"] = camera_settings['iso'] / 100.0
+    
+    # Add FrameRate for consistency
+    controls["FrameRate"] = camera_settings.get('fps', 30)
     
     return controls
 
