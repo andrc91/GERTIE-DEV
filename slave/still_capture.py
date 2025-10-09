@@ -366,12 +366,12 @@ def build_libcamera_settings():
     return settings
 
 def build_camera_controls():
-    """Build Picamera2 controls from settings - REVERTED: Keep working brightness conversion"""
-    controls = {"FrameRate": camera_settings.get('fps', 30)}
-    
-    # CRITICAL FIX: Disable auto-exposure to allow manual brightness control
-    controls["AeEnable"] = False
-    logging.info(f"[STILL] Auto-exposure DISABLED for manual brightness control")
+    """Build Picamera2 controls - MINIMAL APPROACH like rep8"""
+    # MATCH REP8: Don't set any controls for still capture
+    # Rep8 uses NO controls for stills and works perfectly
+    # Return empty dict to let camera use defaults
+    logging.info(f"[STILL] Using MINIMAL controls (matching rep8) - camera defaults")
+    return {}
     
     # Basic image controls
     # REVERTED: Keep GUI brightness scale (-50 to +50 where 0 = neutral) that fixed flip bug

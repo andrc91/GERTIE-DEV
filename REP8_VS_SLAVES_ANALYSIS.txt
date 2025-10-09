@@ -1,0 +1,33 @@
+## CRITICAL DISCOVERY - Rep8 vs Rep1-Rep7 Differences
+
+### Rep8 (local_camera_slave.py) - WORKING:
+- Does NOT set brightness controls when configuring camera
+- Does NOT disable auto-exposure
+- Only sets: `controls={"FrameRate": 15}` for video
+- For stills: NO controls at all, just size configuration
+- Result: Works perfectly!
+
+### Rep1-Rep7 (video_stream.py/still_capture.py) - NOT WORKING:
+- Explicitly sets brightness controls
+- Now disables auto-exposure (our latest fix)
+- Sets multiple controls: Brightness, Contrast, Saturation, etc.
+- Result: White/overexposed images
+
+### The Real Issue:
+The slaves are OVER-CONTROLLING the camera! Rep8 works because it lets the camera use its defaults.
+
+### Possible Problems:
+1. **Brightness conversion formula might be wrong** 
+   - Current: `(brightness + 50) / 50.0` → gives 1.0 for GUI brightness=0
+   - But maybe the camera expects different values?
+
+2. **Setting controls too early or too often**
+   - Rep8 doesn't set controls at all and works fine
+   - Rep1-rep7 set controls in config AND after start
+
+3. **Auto-exposure disable might be making it worse**
+   - Rep8 leaves auto-exposure enabled (default)
+   - Our fix disabled it for rep1-rep7
+
+### Next Step:
+Try matching rep8's approach - minimal camera control intervention!

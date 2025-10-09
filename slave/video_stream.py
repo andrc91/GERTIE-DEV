@@ -270,17 +270,21 @@ def apply_frame_transforms(image_array, device_name):
         return image_array
 
 def build_camera_controls(device_name):
-    """Build ONLY camera hardware controls - separated from transforms"""
+    """Build ONLY camera hardware controls - MINIMAL APPROACH like rep8"""
     try:
         settings = load_device_settings(device_name)
         
-        logging.info(f"[CAMERA] Building hardware controls for {device_name}")
+        logging.info(f"[CAMERA] Building MINIMAL controls for {device_name} (matching rep8)")
         
+        # MATCH REP8: Only set frame rate, let camera handle the rest
         controls = {"FrameRate": settings.get('fps', 30)}
         
-        # CRITICAL FIX: Disable auto-exposure to allow manual brightness control
-        controls["AeEnable"] = False
-        logging.info(f"[CAMERA] Auto-exposure DISABLED for manual brightness control")
+        # DON'T set brightness, contrast, saturation, etc. initially
+        # Rep8 doesn't set these and works perfectly
+        # Let the camera use its defaults like rep8 does
+        
+        logging.info(f"[CAMERA] Using MINIMAL controls like rep8: {controls}")
+        return controls
         
         # Note: WYSIWYG handled by raw sensor config in create_video_configuration
         # No need to set ScalerCrop here - full sensor usage forced via raw parameter
@@ -384,10 +388,11 @@ def start_stream():
         picam2.configure(video_config)
         picam2.start()
         
-        # CRITICAL FIX: Actually apply controls to the running camera!
-        # Without this, brightness is never sent to the hardware
-        picam2.set_controls(camera_controls)
-        logging.info(f"[VIDEO] ✅ Applied controls to camera: {camera_controls}")
+        # MATCH REP8: Don't set controls after start
+        # Rep8 doesn't call set_controls and works perfectly
+        # Let the camera use its auto-exposure and defaults
+        # picam2.set_controls(camera_controls)  # COMMENTED OUT to match rep8
+        logging.info(f"[VIDEO] ✅ Camera started with MINIMAL controls (matching rep8)")
         
         logging.info(f"[VIDEO] ✅ Camera hardware initialized for {device_name}")
         time.sleep(2.0)
