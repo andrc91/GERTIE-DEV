@@ -284,12 +284,13 @@ def build_camera_controls(device_name):
         # Note: WYSIWYG handled by raw sensor config in create_video_configuration
         # No need to set ScalerCrop here - full sensor usage forced via raw parameter
         
-        # Apply brightness to camera hardware (0 is valid neutral value)
-        brightness = settings.get('brightness', 0)
+        # Apply brightness to camera hardware - ALWAYS set with correct conversion
+        brightness = settings.get('brightness', 0)  # GUI scale: -50 to +50, 0 = neutral
         
-        if brightness != 0:  # New scale: -50 to +50, 0 = neutral (matches still_capture.py)
-            controls["Brightness"] = brightness / 50.0  # New formula: direct division
-            logging.info(f"[CAMERA] Hardware brightness for {device_name}: GUI={brightness} → libcamera={brightness/50.0:.2f}")
+        # Convert GUI scale to libcamera: GUI -50→+50 becomes libcamera 0.0→2.0 where 1.0 = neutral
+        libcam_brightness = (brightness + 50) / 50.0  # GUI 0 → libcamera 1.0 (neutral)
+        controls["Brightness"] = libcam_brightness
+        logging.info(f"[CAMERA] Hardware brightness for {device_name}: GUI={brightness} → libcamera={libcam_brightness:.2f} (1.0=neutral)")
         
         # Other camera controls
         contrast = settings.get('contrast', 50)
