@@ -324,14 +324,17 @@ def build_libcamera_settings():
     logging.info(f"[STILL] JPEG Quality: {jpeg_quality}% (NO size params - libcamera default HIGH RES)")
     
     # Apply camera settings (only if different from defaults)
-    # REVERTED: Keep working brightness calculation that fixed flip bug
+    # CRITICAL FIX: ALWAYS set brightness, even when 0 - resets camera hardware state
     gui_brightness = camera_settings.get('brightness', 0)  # GUI scale
-    if gui_brightness != 0:
-        # Convert GUI scale to libcamera scale (working version formula)
-        if -50 <= gui_brightness <= 50:
-            brightness_val = gui_brightness / 50.0
-            settings.extend(["--brightness", str(brightness_val)])
-            logging.info(f"[STILL] Brightness: GUI={gui_brightness} → libcamera={brightness_val:.2f}")
+    # ALWAYS set brightness (removed "if gui_brightness != 0" condition)
+    # Without this, camera hardware retains old brightness state after service restart
+    if -50 <= gui_brightness <= 50:
+        brightness_val = gui_brightness / 50.0
+        settings.extend(["--brightness", str(brightness_val)])
+        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → libcamera={brightness_val:.2f} (always set to reset hardware)")
+    else:
+        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0)")
+        settings.extend(["--brightness", "0.0"])
     
     if camera_settings.get('contrast', 50) != 50:
         contrast_val = camera_settings['contrast'] / 50.0
