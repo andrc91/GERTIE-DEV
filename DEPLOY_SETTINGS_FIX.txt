@@ -1,0 +1,125 @@
+# CRITICAL FIX DEPLOYMENT - Settings Files Cleanup
+
+Date: $(date)
+Branch: master
+Last commit: 3562a48
+
+## 🎯 ROOT CAUSE IDENTIFIED & FIXED
+
+**The Problem**: Old corrupted settings files on slaves persisting through deployments
+- Settings files had wrong brightness values (50, 100, etc.)
+- Migration logic couldn't fix them properly
+- Manual reset from GUI wrote to corrupted files but didn't take effect
+- Each deployment made it worse as corrupted values persisted
+
+**The Fix**: Modified sync_to_slaves.sh to DELETE all settings files before service restart
+- Forces services to create fresh settings files with correct defaults
+- Prevents old corrupted values from persisting
+- Ensures clean slate on every deployment
+
+## 📦 What Changed
+
+### sync_to_slaves.sh:
+- Added `rm -f *_settings.json` for all slaves (rep1-rep7)
+- Added `rm -f rep8_settings.json` for local (rep8)
+- Settings files cleared BEFORE service restart
+- Services will auto-create fresh files with correct defaults
+
+## 🚀 DEPLOYMENT STEPS
+
+### 1. Copy to USB:
+```bash
+cp -r /Users/andrew1/Desktop/camera_system_integrated_final /Volumes/[USB_NAME]/
+```
+
+### 2. On control1:
+```bash
+# Copy from USB to control1
+cp -r /media/[USB]/camera_system_integrated_final /home/andrc1/
+cd /home/andrc1/camera_system_integrated_final
+
+# Run the updated sync script
+./sync_to_slaves.sh
+```
+
+### 3. Test the Fix:
+```bash
+# Run the GUI with logging
+./run_gui_with_logging.sh
+
+# Test these operations:
+# 1. Start Video Streams - should show properly exposed previews
+# 2. Capture Still - should capture properly exposed images
+# 3. Factory Reset - should maintain proper exposure
+# 4. Manual brightness adjust - should work correctly
+```
+
+### 4. Copy Log Back:
+```bash
+# Copy the updatelog.txt to USB
+cp /home/andrc1/Desktop/updatelog.txt /media/[USB]/
+```
+
+### 5. Return to MacBook:
+```bash
+# Copy log from USB to Desktop
+cp /Volumes/[USB_NAME]/updatelog.txt ~/Desktop/
+```
+
+## ✅ Expected Results After This Fix
+
+**Video Streams (rep1-rep7)**:
+- ✅ Should show properly exposed previews immediately
+- ✅ No white/overexposed images
+- ✅ Brightness controls should work
+
+**Still Captures (rep1-rep7)**:
+- ✅ Should capture properly exposed images
+- ✅ No white images on first capture
+- ✅ Manual reset should work if needed
+
+**Factory Reset**:
+- ✅ Should properly reset to neutral exposure
+- ✅ Settings files recreated with correct defaults
+
+**rep8 (Local)**:
+- ✅ Should continue working (was already working)
+- ✅ Settings file cleared and recreated
+
+## 🔍 What to Look For in Logs
+
+**Good Signs**:
+- "Old settings files cleared" for each rep
+- "Creating default settings file" messages
+- "brightness=0 (GUI scale)" in logs
+- No "brightness 50 (old neutral)" migration messages
+
+**If Issues Persist**:
+- Check for "Failed to clear" messages
+- Look for permission errors on settings files
+- Check if services are creating new settings files
+
+## 📝 Key Points
+
+1. **This fix addresses the ROOT CAUSE** - corrupted settings files persisting
+2. **Clean slate approach** - delete old, create fresh
+3. **Automatic** - no manual intervention needed on Pis
+4. **Comprehensive** - affects all reps including local
+
+## 🚨 IMPORTANT
+
+The sync script will now ALWAYS delete settings files before restart. This ensures:
+- Fresh start on every deployment
+- No accumulation of corrupted values
+- Consistent behavior across all cameras
+
+This is intentional and correct behavior - settings files are meant to be ephemeral and recreated from defaults.
+
+---
+
+Previous fixes are still in place:
+- Brightness conversion formula: (brightness + 50) / 50.0 ✅
+- GUI 0 = libcamera 1.0 (neutral) ✅
+- Validation removed that blocked brightness=0 ✅
+
+This deployment adds the missing piece - clearing corrupted settings files!

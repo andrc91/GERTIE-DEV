@@ -278,6 +278,10 @@ def build_camera_controls(device_name):
         
         controls = {"FrameRate": settings.get('fps', 30)}
         
+        # CRITICAL FIX: Disable auto-exposure to allow manual brightness control
+        controls["AeEnable"] = False
+        logging.info(f"[CAMERA] Auto-exposure DISABLED for manual brightness control")
+        
         # Note: WYSIWYG handled by raw sensor config in create_video_configuration
         # No need to set ScalerCrop here - full sensor usage forced via raw parameter
         
