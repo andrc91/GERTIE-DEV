@@ -380,6 +380,11 @@ def start_stream():
         picam2.configure(video_config)
         picam2.start()
         
+        # CRITICAL FIX: Actually apply controls to the running camera!
+        # Without this, brightness is never sent to the hardware
+        picam2.set_controls(camera_controls)
+        logging.info(f"[VIDEO] ✅ Applied controls to camera: {camera_controls}")
+        
         logging.info(f"[VIDEO] ✅ Camera hardware initialized for {device_name}")
         time.sleep(2.0)
         

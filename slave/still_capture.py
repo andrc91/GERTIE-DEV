@@ -252,6 +252,12 @@ def capture_with_processing(filename):
         picam2.configure(still_config)
         picam2.start()
         
+        # CRITICAL FIX: Actually apply brightness controls to the running camera!
+        # Without this, brightness is never sent to the hardware
+        if 'Brightness' in controls:
+            picam2.set_controls(controls)
+            logging.info(f"[SLAVE] Applied camera controls: brightness={controls.get('Brightness', 'N/A')}")
+        
         # Let camera settle - SIMPLE timing like working slave201
         time.sleep(1)
         
