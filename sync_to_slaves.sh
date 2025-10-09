@@ -83,6 +83,15 @@ sync_to_remote() {
     fi
     
     # Restart services
+    log "INFO" "$slave_name: Clearing old settings files to force fresh initialization..."
+    
+    # Remove old settings files that might have wrong values
+    if ssh "$REMOTE_USER@$slave_ip" "rm -f $SOURCE_DIR/*_settings.json" 2>&1 | tee -a "$LOG_FILE"; then
+        log "INFO" "$slave_name: Old settings files cleared"
+    else
+        log "WARN" "$slave_name: No settings files to clear or failed to clear them"
+    fi
+    
     log "INFO" "$slave_name: Restarting services..."
     
     # Restart video_stream
@@ -113,6 +122,15 @@ sync_to_remote() {
 # Function to sync to local slave (rep8)
 sync_to_local() {
     log_section "SYNCING TO rep8 (LOCAL)"
+    
+    log "INFO" "rep8: Clearing old settings files to force fresh initialization..."
+    
+    # Remove old settings files for local camera
+    if rm -f $SOURCE_DIR/rep8_settings.json 2>&1 | tee -a "$LOG_FILE"; then
+        log "INFO" "rep8: Old settings file cleared"
+    else
+        log "WARN" "rep8: No settings file to clear or failed to clear it"
+    fi
     
     log "INFO" "rep8: Restarting local services..."
     
