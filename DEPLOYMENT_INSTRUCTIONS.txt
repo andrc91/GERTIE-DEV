@@ -1,0 +1,121 @@
+═══════════════════════════════════════════════════════════════════
+  GERTIE CAMERA SYSTEM - SIMPLIFIED DEPLOYMENT INSTRUCTIONS
+═══════════════════════════════════════════════════════════════════
+Date: October 8, 2025
+Status: READY FOR DEPLOYMENT
+
+🔧 WHAT WAS FIXED:
+═══════════════════════════════════════════════════════════════════
+
+1. ✅ Scripts are now executable (no more chmod +x needed!)
+   - sync_to_slaves.sh
+   - run_gui_with_logging.sh
+
+2. ✅ Directory already has the correct name
+   - camera_system_integrated_final (matches what's on the Pi)
+
+3. ✅ Import statements are correct
+   - All Python files use proper relative imports
+
+4. ✅ WYSIWYG preview fix is included
+   - Preview resolution: 640x360 (was 1280x720)
+
+
+📋 SIMPLE 5-STEP DEPLOYMENT
+═══════════════════════════════════════════════════════════════════
+
+STEP 1: Copy to USB
+────────────────────
+On your Mac:
+  1. Insert USB drive
+  2. Copy this ENTIRE folder (camera_system_integrated_final) to USB
+  3. Safely eject USB
+
+
+STEP 2: Deploy on Pi
+────────────────────
+On control1:
+  1. Insert USB drive
+  2. Mount USB (if not auto-mounted):
+       sudo mount /dev/sda1 /mnt/usb
+  
+  3. Replace the old directory:
+       cd /home/andrc1
+       rm -rf camera_system_integrated_final
+       cp -r /mnt/usb/camera_system_integrated_final .
+  
+  4. Navigate and deploy:
+       cd camera_system_integrated_final
+       ./sync_to_slaves.sh
+
+
+STEP 3: Test the GUI
+────────────────────
+  1. Run GUI with logging (no chmod needed!):
+       ./run_gui_with_logging.sh
+  
+  2. Test the WYSIWYG preview:
+       ✓ Preview window should open at 640x360
+       ✓ No timeout warnings
+       ✓ All camera controls responsive
+  
+  3. Exit GUI (Ctrl+C or close window)
+
+
+STEP 4: Collect Logs
+────────────────────
+  1. Copy log file to USB:
+       cp /home/andrc1/Desktop/updatelog.txt /mnt/usb/
+  
+  2. Safely eject USB:
+       sync
+       sudo umount /mnt/usb
+
+
+STEP 5: Analyze Results
+────────────────────────
+Back on Mac:
+  1. Copy updatelog.txt from USB to Desktop
+  2. Share the log file for analysis
+
+
+⚠️  CRITICAL NOTES
+═══════════════════════════════════════════════════════════════════
+
+1. **Always delete the old directory first**
+   The old version has wrong imports that cause GUI to crash
+   
+2. **No renaming needed**
+   Directory is already named camera_system_integrated_final
+   
+3. **Scripts are already executable**
+   No chmod +x needed - they're ready to run!
+
+
+🎯 EXPECTED RESULTS
+═══════════════════════════════════════════════════════════════════
+
+After deployment, you should see:
+  ✅ All 7 slaves synced successfully
+  ✅ All services restarted without errors
+  ✅ GUI launches without ModuleNotFoundError
+  ✅ Preview windows display at 640x360 resolution
+  ✅ No timeout issues during camera initialization
+
+
+🚨 IF YOU GET THE IMPORT ERROR AGAIN
+═══════════════════════════════════════════════════════════════════
+
+This means the old directory wasn't deleted. Fix it:
+
+  cd /home/andrc1
+  rm -rf camera_system_integrated_final
+  cp -r /mnt/usb/camera_system_integrated_final .
+  cd camera_system_integrated_final
+  ./sync_to_slaves.sh
+
+
+═══════════════════════════════════════════════════════════════════
+Questions? Check updatelog.txt for detailed error messages.
+Quick Reference: See QUICK_DEPLOY.txt for command summary.
+═══════════════════════════════════════════════════════════════════

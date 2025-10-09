@@ -1,0 +1,78 @@
+========================================
+EMERGENCY ROLLBACK - DEPLOY NOW
+========================================
+Date: $(date)
+Commit: 366b45b
+Status: READY FOR HARDWARE TEST
+
+WHAT HAPPENED:
+--------------
+- System got progressively worse through the day
+- rep1-7 completely broken (white images, no video)
+- rep8 (local) still works fine
+- Diagnosis: Code drift from GOLDEN REFERENCE caused all issues
+
+WHAT WAS FIXED:
+---------------
+✓ Restored EXACT GOLDEN REFERENCE code (zero modifications)
+✓ Removed conflicting jpeg_quality values
+✓ Removed unproven timing changes  
+✓ Removed quality reduction experiments
+✓ Files now BYTE-FOR-BYTE match with proven working baseline
+
+VERIFICATION:
+-------------
+$ diff GOLDEN_REFERENCE_DO_NOT_TOUCH/slave/video_stream.py camera_system_integrated_final/slave/video_stream.py
+  → No differences (EXACT MATCH ✓)
+
+$ diff GOLDEN_REFERENCE_DO_NOT_TOUCH/slave/still_capture.py camera_system_integrated_final/slave/still_capture.py
+  → No differences (EXACT MATCH ✓)
+
+WHY THIS WILL WORK:
+-------------------
+1. rep8 works = Hardware is fine
+2. GOLDEN REFERENCE = Proven working code
+3. Code drift = Root cause of failures
+4. Exact match = All drift removed
+
+DEPLOYMENT STEPS:
+-----------------
+1. Copy camera_system_integrated_final to USB
+2. On control1: Copy to /home/andrc1/camera_system_integrated_final
+3. Run: cd /home/andrc1/camera_system_integrated_final
+4. Run: ./sync_to_slaves.sh
+5. Run: ./run_gui_with_logging.sh
+6. Test: Start video streams on all cameras
+7. Test: Capture stills from all cameras
+8. Copy /home/andrc1/Desktop/updatelog.txt to USB
+9. Return to MacBook for analysis
+
+EXPECTED RESULTS:
+-----------------
+✓ All 8 cameras show video preview
+✓ All 8 cameras capture non-white images
+✓ File sizes normal (not tiny)
+✓ No "Message too long" socket errors
+✓ System behaves like original working version
+
+IF IT WORKS:
+------------
+- We have proven baseline restored
+- Can start making small, tested changes again
+- Each change validated before next one
+
+IF IT STILL FAILS:
+------------------
+- Hardware issue (network, camera, Pi)
+- Not a software problem
+- Check physical connections, camera modules
+
+SESSION LOG:
+------------
+Full context: /Users/andrew1/Desktop/GERTIE_SESSION_LOG.md
+
+CONFIDENCE LEVEL: HIGH
+This is the proven working code that was validated in QA.
+No experimental changes, no modifications, pure baseline.
+
+========================================

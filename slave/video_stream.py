@@ -194,10 +194,7 @@ def save_device_settings(device_name, settings):
         settings_file = f"/home/andrc1/camera_system_integrated_final/{device_name}_settings.json"
         temp_file = f"{settings_file}.tmp"
         
-        # CRITICAL: Validate brightness before saving
-        if settings.get('brightness', 50) == 0:
-            logging.warning(f"[SETTINGS] Preventing save of brightness=0 for {device_name}")
-            settings['brightness'] = 50
+        # Note: brightness=0 is valid (neutral on GUI scale -50 to +50)
         
         os.makedirs(os.path.dirname(settings_file), exist_ok=True)
         
@@ -205,7 +202,7 @@ def save_device_settings(device_name, settings):
             json.dump(settings, f, indent=2)
         
         os.rename(temp_file, settings_file)
-        logging.info(f"[SETTINGS] Saved {device_name}: brightness={settings.get('brightness', 50)}")
+        logging.info(f"[SETTINGS] Saved {device_name}: brightness={settings.get('brightness', 0)}")
         return True
         
     except Exception as e:
@@ -563,10 +560,8 @@ def handle_settings_package_fixed(command, device_name):
             if key in current_settings:
                 old_val = current_settings[key]
                 
-                # CRITICAL: Block brightness=0 from GUI bug
-                if key == 'brightness' and value == 0:
-                    logging.warning(f"[SETTINGS] 🚨 BLOCKED brightness=0 for {device_name} - keeping {old_val}")
-                    continue
+                # FIXED: brightness=0 is valid! It's the GUI neutral value
+                # No need to block it anymore
                 
                 # Apply the setting change
                 current_settings[key] = value

@@ -1,0 +1,28 @@
+╔═══════════════════════════════════════════════════════════════╗
+║     GERTIE DEPLOYMENT QUICK REFERENCE CARD                    ║
+╚═══════════════════════════════════════════════════════════════╝
+
+ON PI (control1):
+──────────────────────────────────────────────────────────────────
+
+Step 1: Delete old directory
+    cd /home/andrc1
+    rm -rf camera_system_integrated_final
+
+Step 2: Copy new directory from USB
+    cp -r /mnt/usb/camera_system_integrated_final .
+
+Step 3: Deploy to slaves
+    cd camera_system_integrated_final
+    ./sync_to_slaves.sh
+
+Step 4: Run GUI
+    ./run_gui_with_logging.sh
+
+Step 5: Copy log
+    cp /home/andrc1/Desktop/updatelog.txt /mnt/usb/
+
+──────────────────────────────────────────────────────────────────
+✅ NO chmod +x NEEDED - Scripts are already executable!
+✅ Directory already has the correct name - no renaming needed!
+──────────────────────────────────────────────────────────────────
