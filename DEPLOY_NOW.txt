@@ -1,36 +1,34 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: 2025-10-14 18:36:00
-Commit: d9bfdc4 Fix: Spacebar animation bleed - prevent event propagation to focused button
+Date: 2025-10-14 18:44:00
+Commits:
+- 45502fe Feature: Switch to Escape key for exiting exclusive mode (was 0 key)
+- d9bfdc4 Fix: Spacebar animation bleed - prevent event propagation to focused button
 
-## PHASE B COMPLETE: Keyboard Shortcuts Enhancement
+## PHASE B ENHANCEMENTS COMPLETE: Keyboard Shortcuts Refinement
 
-### What Was Done:
-✅ **Discovered**: All keyboard shortcuts already implemented in gui_base.py (lines 212-244)
-✅ **Fixed**: Spacebar animation bug - wrong button was showing pressed state
-✅ **Enhanced**: Event propagation now properly stopped with "break" return
+### What Changed:
+✅ **Spacebar animation fix**: No more wrong button animation (d9bfdc4)
+✅ **Escape key enhancement**: Now exits exclusive mode (was 0 key) (45502fe)
 
-### Keyboard Shortcuts Available:
-- **Space**: Capture all cameras (NOW FIXED - correct button animation)
+### Updated Keyboard Shortcuts:
+- **Space**: Capture all cameras (fixed animation)
 - **1-8**: Toggle individual camera preview (exclusive/normal view)
-- **0**: Show all cameras (exit exclusive mode)
+- **Esc**: Exit exclusive mode and show all cameras (NEW - was 0 key)
 - **S**: Open settings menu
 - **G**: Open gallery panel
 - **R**: Restart all video streams
-- **Esc**: Close dialogs (handled by individual dialogs)
 - **Ctrl+Q**: Quit application
 
-### Bug Fixed:
-**Before**: Spacebar executed capture correctly, but "Start Video Streams" button showed pressed animation
-**After**: Spacebar executes capture correctly, NO button animation bleed
+### User Experience Improvements:
+**Before**: 
+- 0 key to exit exclusive mode (counterintuitive)
+- Spacebar showed wrong button animation
 
-### Technical Fix:
-Changed spacebar binding to return "break" which stops tkinter event propagation:
-```python
-def handle_space(event):
-    self.capture_all_stills()
-    return "break"  # Prevents focused button from receiving event
-```
+**After**:
+- Escape key to exit exclusive mode (natural, intuitive)
+- Spacebar shows correct visual feedback
+- Better workflow: Number key focuses → Escape unfocuses
 
 ### MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
@@ -38,54 +36,63 @@ def handle_space(event):
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test Keyboard Shortcuts (see below)
+6. Test Enhanced Keyboard Shortcuts (see below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
 ## Testing Procedure:
 
-### 1. Test Spacebar Fix (Primary):
-- Click somewhere in GUI (not on any button)
-- Press **Spacebar**
+### 1. Test Escape Key (NEW PRIMARY FEATURE):
+- Press **5** (or any number 1-8)
+- **Expected**: rep5 camera shown enlarged (exclusive mode)
+- Press **Escape**
+- **Expected**: Return to normal 8-camera grid view ✅
+- **Intuitive**: Escape = "go back" / "exit mode"
+
+### 2. Test Spacebar (FIXED):
+- Press **Space**
 - **Expected**: 
-  - ✅ Hear 8 rapid shutter sounds (per-camera audio from Phase A)
-  - ✅ Images captured from all 8 cameras
-  - ✅ NO button animation on "Start Video Streams" button
-  - ✅ Visual feedback only on screen (no misleading button press)
+  - ✅ Hear 8 rapid shutter sounds
+  - ✅ Images captured from all cameras
+  - ✅ NO animation on "Start Video Streams" button
+  - ✅ Clean visual feedback
 
-### 2. Test Number Keys (1-8):
-- Press **1** → Should show rep1 camera enlarged (exclusive mode)
-- Press **1** again → Should return to normal 8-camera grid
-- Press **5** → Should show rep5 camera enlarged
-- Press **0** → Should return to normal grid from any exclusive mode
+### 3. Test Camera Focus Flow:
+- Press **1** → rep1 enlarged
+- Press **Escape** → Back to grid
+- Press **3** → rep3 enlarged
+- Press **3** again → Back to grid (toggle behavior still works)
+- Press **7** → rep7 enlarged
+- Press **Escape** → Back to grid
 
-### 3. Test Other Shortcuts:
-- **S**: Should open settings/application preferences
-- **G**: Should open gallery panel
-- **R**: Should restart all video streams
-- **Ctrl+Q**: Should quit application cleanly
+### 4. Test Other Shortcuts:
+- **S**: Opens settings ✅
+- **G**: Opens gallery ✅
+- **R**: Restarts streams ✅
+- **Ctrl+Q**: Quits application ✅
 
 ## Expected Result:
-✅ **Spacebar**: Captures all, correct audio, NO animation bleed
+✅ **Escape key**: Natural, intuitive exit from exclusive mode
+✅ **Spacebar**: Clean capture with correct visual feedback
 ✅ **Number keys**: Smooth camera focus switching
-✅ **All shortcuts**: Work as documented in help text
-✅ **User Experience**: Professional, efficient workflow
+✅ **All shortcuts**: Professional, efficient workflow
 
 ## Technical Details:
-- **Fix Type**: Event propagation control
-- **Method**: Return "break" from keyboard handler
-- **Impact**: Visual only - functionality unchanged
-- **Affected Code**: setup_keyboard_shortcuts() method (6 lines modified)
+- **Key Binding Change**: `'0'` → `'<Escape>'`
+- **Function Called**: `self.show_all_cameras()`
+- **Help Text Updated**: GUI shows "[Esc] Show All" instead of "[0] Show All"
+- **Lines Modified**: 3 lines in gui_base.py (binding + help text + comment)
 
-## Phase A + Phase B Summary:
+## Complete Phase A + B Summary:
 
-| Feature | Status | Commits |
-|---------|--------|---------|
-| Audio feedback (shutter.wav) | ✅ | c191fef, 54f73b8 |
-| Platform compatibility (aplay) | ✅ | c3997e0 |
+| Enhancement | Status | Commit |
+|-------------|--------|--------|
+| Audio feedback (shutter.wav) | ✅ | c191fef |
+| Individual capture audio | ✅ | 54f73b8 |
+| Platform fix (aplay on Linux) | ✅ | c3997e0 |
 | Per-camera audio burst | ✅ | 81cc7af |
-| **Spacebar animation fix** | ✅ | **d9bfdc4** |
-| Keyboard shortcuts system | ✅ | Pre-existing |
+| Spacebar animation fix | ✅ | d9bfdc4 |
+| **Escape key for exit mode** | ✅ | **45502fe** |
 
 ## DO NOT:
 - Use any other deployment method
@@ -93,4 +100,4 @@ def handle_space(event):
 - Modify sync_to_slaves.sh
 
 ---
-**PHASE B COMPLETE**: Keyboard shortcuts working perfectly with proper visual feedback 🎹
+**PHASE B COMPLETE**: Professional keyboard shortcuts with intuitive Escape key behavior 🎹✨
