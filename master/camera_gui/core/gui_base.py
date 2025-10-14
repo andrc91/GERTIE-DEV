@@ -249,6 +249,7 @@ class MasterVideoGUI:
             
             # Set exclusive camera state for video resize logic
             self.exclusive_camera = camera_name
+            self.exclusive_ip = config.SLAVES[camera_name]['ip']
             
             # First hide all cameras
             for name, frame in self.slave_frames.items():
@@ -268,6 +269,7 @@ class MasterVideoGUI:
         
         # Clear exclusive camera state
         self.exclusive_camera = None
+        self.exclusive_ip = None
         
         for name in self.slave_frames:
             frame = self.slave_frames[name]

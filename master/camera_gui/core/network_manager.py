@@ -189,13 +189,8 @@ class NetworkManager:
         try:
             if ip in self.gui.video_labels:
                 # Check if this camera is in exclusive view mode (GUI thread = safe to check state)
-                is_exclusive = False
-                if hasattr(self.gui, 'exclusive_camera') and self.gui.exclusive_camera:
-                    # Find camera name for this IP
-                    for name, slave_info in self.gui.slaves.items():
-                        if slave_info.get('ip') == ip and name == self.gui.exclusive_camera:
-                            is_exclusive = True
-                            break
+                is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                               self.gui.exclusive_ip == ip)
                 
                 # Resize for exclusive mode if needed
                 if is_exclusive:
