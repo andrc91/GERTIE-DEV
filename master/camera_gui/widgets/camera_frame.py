@@ -147,6 +147,8 @@ class CameraFrameManager:
             
             camera_frame = CameraFrame(self.gui, ip, name, parent_frame, row, col)
             self.camera_frames[ip] = camera_frame
+            # Also store by name in gui.slave_frames for keyboard shortcuts
+            self.gui.slave_frames[name] = camera_frame.frame
 
     def start_all_streams(self):
         """Start all camera streams"""
