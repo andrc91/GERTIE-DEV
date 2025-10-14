@@ -148,7 +148,7 @@ class MasterVideoGUI:
         self.stop_streams_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
         
         # Add keyboard shortcuts help text
-        shortcuts_text = "Shortcuts: [Space] Capture All | [1-8] Focus Camera | [0] Show All | [S] Settings | [G] Gallery | [R] Restart | [Ctrl+Q] Quit"
+        shortcuts_text = "Shortcuts: [Space] Capture All | [1-8] Focus Camera | [Esc] Show All | [S] Settings | [G] Gallery | [R] Restart | [Ctrl+Q] Quit"
         shortcuts_label = ttk.Label(control_frame, text=shortcuts_text, style="TLabel", font=('Arial', 9))
         shortcuts_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="ew")
 
@@ -223,8 +223,8 @@ class MasterVideoGUI:
             if camera_name in config.SLAVES:
                 self.root.bind(str(i), lambda e, name=camera_name: self.toggle_camera_preview(name))
         
-        # 0 key - Show all cameras (exit exclusive mode)
-        self.root.bind('0', lambda e: self.show_all_cameras())
+        # Escape key - Exit exclusive mode and show all cameras
+        self.root.bind('<Escape>', lambda e: self.show_all_cameras())
         
         # S key - Open settings menu  
         self.root.bind('<s>', lambda e: self.open_camera_settings_for_all())
@@ -238,7 +238,6 @@ class MasterVideoGUI:
         self.root.bind('<r>', lambda e: self.restart_all_streams())
         self.root.bind('<R>', lambda e: self.restart_all_streams())
         
-        # Escape key - Close dialogs (handled by individual dialogs)
         # Ctrl+Q - Quit application
         self.root.bind('<Control-q>', lambda e: self.root.quit())
         
