@@ -162,10 +162,9 @@ class MasterVideoGUI:
         """Capture stills from all cameras"""
         logging.info("Capturing stills from all cameras")
         
-        # Play capture sound if enabled
-        self.audio.play_capture_sound()
-        
         for ip in self.get_camera_ips():
+            # Play capture sound for each camera
+            self.audio.play_capture_sound()
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
 
