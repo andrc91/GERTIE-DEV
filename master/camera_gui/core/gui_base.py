@@ -143,7 +143,7 @@ class MasterVideoGUI:
         self.stop_streams_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
         
         # Add keyboard shortcuts help text
-        shortcuts_text = "Shortcuts: [Space] Capture All | [1-8] Toggle Camera | [S] Settings | [G] Gallery | [R] Restart | [Ctrl+Q] Quit"
+        shortcuts_text = "Shortcuts: [Space] Capture All | [1-8] Focus Camera | [0] Show All | [S] Settings | [G] Gallery | [R] Restart | [Ctrl+Q] Quit"
         shortcuts_label = ttk.Label(control_frame, text=shortcuts_text, style="TLabel", font=('Arial', 9))
         shortcuts_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="ew")
 
@@ -212,6 +212,9 @@ class MasterVideoGUI:
             if camera_name in config.SLAVES:
                 self.root.bind(str(i), lambda e, name=camera_name: self.toggle_camera_preview(name))
         
+        # 0 key - Show all cameras (exit exclusive mode)
+        self.root.bind('0', lambda e: self.show_all_cameras())
+        
         # S key - Open settings menu  
         self.root.bind('<s>', lambda e: self.open_camera_settings_for_all())
         self.root.bind('<S>', lambda e: self.open_camera_settings_for_all())
@@ -231,19 +234,42 @@ class MasterVideoGUI:
         logging.info("Keyboard shortcuts initialized")
     
     def toggle_camera_preview(self, camera_name):
-        """Toggle individual camera preview visibility"""
-        if camera_name in self.slave_frames:
-            frame = self.slave_frames[camera_name]
-            if frame.winfo_viewable():
+        """Toggle exclusive camera preview - show only selected camera enlarged"""
+        # Check if we're in exclusive mode (only one camera visible)
+        visible_cameras = [name for name in self.slave_frames 
+                          if self.slave_frames[name].winfo_viewable()]
+        
+        if len(visible_cameras) == 1 and camera_name in visible_cameras:
+            # If clicking the same camera that's exclusive, return to normal view
+            logging.info(f"Returning to normal view from {camera_name}")
+            self.show_all_cameras()
+        else:
+            # Enter exclusive mode for this camera
+            logging.info(f"Entering exclusive view for {camera_name}")
+            
+            # First hide all cameras
+            for name, frame in self.slave_frames.items():
                 frame.grid_remove()
-                logging.info(f"Hiding camera preview: {camera_name}")
-            else:
-                # Find the appropriate position
-                idx = list(config.SLAVES.keys()).index(camera_name)
-                row = idx // 4
-                col = idx % 4
-                frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-                logging.info(f"Showing camera preview: {camera_name}")
+            
+            # Show only the selected camera, enlarged to fill the grid
+            if camera_name in self.slave_frames:
+                frame = self.slave_frames[camera_name]
+                # Make it span multiple grid cells for larger view
+                frame.grid(row=0, column=0, rowspan=2, columnspan=4, 
+                          padx=5, pady=5, sticky="nsew")
+                logging.info(f"Showing exclusive preview: {camera_name}")
+    
+    def show_all_cameras(self):
+        """Return to normal view showing all cameras in grid"""
+        logging.info("Showing all camera previews in normal grid")
+        for name in self.slave_frames:
+            frame = self.slave_frames[name]
+            # Restore original grid position
+            idx = list(config.SLAVES.keys()).index(name)
+            row = idx // 4
+            col = idx % 4
+            frame.grid(row=row, column=col, rowspan=1, columnspan=1,
+                      padx=5, pady=5, sticky="nsew")
     
     def open_gallery(self):
         """Open the gallery panel"""
