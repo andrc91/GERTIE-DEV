@@ -247,6 +247,9 @@ class MasterVideoGUI:
             # Enter exclusive mode for this camera
             logging.info(f"Entering exclusive view for {camera_name}")
             
+            # Set exclusive camera state for video resize logic
+            self.exclusive_camera = camera_name
+            
             # First hide all cameras
             for name, frame in self.slave_frames.items():
                 frame.grid_remove()
@@ -262,6 +265,10 @@ class MasterVideoGUI:
     def show_all_cameras(self):
         """Return to normal view showing all cameras in grid"""
         logging.info("Showing all camera previews in normal grid")
+        
+        # Clear exclusive camera state
+        self.exclusive_camera = None
+        
         for name in self.slave_frames:
             frame = self.slave_frames[name]
             # Restore original grid position
