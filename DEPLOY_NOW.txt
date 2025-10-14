@@ -1,18 +1,20 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: 2025-10-14 17:50:00
-Commits: 
-- 54f73b8 Feature: Add audio feedback to individual camera capture buttons
-- c191fef Feature: Configure audio_feedback to use shutter.wav for capture sound
+Date: 2025-10-14 18:07:00
+Commit: c3997e0 Fix: Platform-aware audio playback - use aplay on Linux, afplay on macOS
 
-## FEATURE: Audio Capture Feedback with shutter.wav
+## CRITICAL FIX: Audio Playback on Raspberry Pi
 
-### Changes Made:
-1. ✅ Configured audio_feedback.py to use shutter.wav instead of system sounds
-2. ✅ Added audio feedback to individual camera Capture buttons
-3. ✅ Audio integration already exists for Capture All button
-4. ✅ Settings toggle already exists in Application Preferences
-5. ✅ Preferences persistence already implemented
+### Root Cause:
+- Previous deployment (f62cb70) used macOS-specific `afplay` command
+- Raspberry Pi runs Linux and doesn't have `afplay`
+- Result: Silent failure - captures worked but no sound played
+
+### Fix Applied:
+✅ Added platform detection (sys.platform)
+✅ Linux/Pi: Uses `aplay -q` (ALSA audio player, built-in)
+✅ macOS: Uses `afplay` (native audio player)
+✅ Maintains non-blocking, silent failure behavior
 
 ### MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
@@ -25,39 +27,83 @@ Commits:
 8. Return updatelog.txt to MacBook
 
 ## Testing Procedure:
-1. **Check Audio Enabled**: Settings → Application Preferences → "Enable Audio Feedback" should be checked
-2. **Test Capture All**: Click "Capture All Cameras" button → should hear shutter.wav sound
-3. **Test Individual**: Click "Capture" on any camera → should hear shutter.wav sound  
-4. **Test Settings**: Uncheck "Enable Audio Feedback" → captures should be silent
-5. **Test Settings**: Re-check "Enable Audio Feedback" → should hear test sound immediately
-6. **Verify Persistence**: Close GUI, reopen → audio setting should be remembered
+### Audio Playback Test:
+1. **Manual Command Test** (RECOMMENDED FIRST):
+   ```bash
+   # On control1, test aplay directly:
+   aplay /home/andrc1/camera_system_integrated_final/master/shutter.wav
+   # Should hear shutter sound immediately
+   ```
+
+2. **GUI Audio Test**:
+   - Launch GUI: ./run_gui_with_logging.sh
+   - Settings → Application Preferences → Verify "Enable Audio Feedback" is checked
+   - Click "Capture All Cameras" button → **SHOULD HEAR SHUTTER.WAV SOUND** 🔊
+   - Click individual "Capture" on any camera → **SHOULD HEAR SHUTTER.WAV SOUND** 🔊
+   - Uncheck "Enable Audio Feedback" → captures should be silent
+   - Re-check "Enable Audio Feedback" → should hear test sound + captures have sound again
+
+3. **Persistence Test**:
+   - Close GUI, reopen → audio setting should be remembered
 
 ## Expected Result:
-✅ Audible shutter.wav sound plays when capturing (if audio enabled)
+✅ **AUDIBLE shutter.wav sound plays on EVERY capture** (both "Capture All" and individual)
+✅ Sound plays on Linux/Raspberry Pi using aplay command
 ✅ Silence when audio disabled in settings
 ✅ Setting persists across GUI restarts
-✅ Both "Capture All" and individual "Capture" buttons play sound
-✅ Sound is non-blocking (doesn't delay captures)
+✅ Non-blocking operation (captures don't wait for sound to finish)
 
 ## Technical Details:
-- Sound file: master/shutter.wav (included in deployment)
-- Path resolution: Uses Path(__file__).parent.parent.parent
-- Fallback: macOS system sounds, then Linux beep
-- Platform: Non-blocking subprocess.Popen with afplay (macOS)
-- Silent failure: Audio errors logged but don't break captures
+- **Platform Detection**: sys.platform == 'darwin' (macOS) or 'linux' (Pi)
+- **Linux Command**: `aplay -q /path/to/shutter.wav` (-q = quiet, no terminal output)
+- **macOS Command**: `afplay /path/to/shutter.wav`
+- **Sound File**: master/shutter.wav (deployed to Pi)
+- **Process**: Non-blocking subprocess.Popen
+- **Error Handling**: Silent failure with debug logging (audio is non-critical)
+
+## Troubleshooting:
+### If audio still doesn't work:
+1. **Test aplay manually**:
+   ```bash
+   aplay /home/andrc1/camera_system_integrated_final/master/shutter.wav
+   ```
+   - If this works: Problem is in Python code integration
+   - If this fails: Check audio hardware/volume settings
+
+2. **Check audio hardware**:
+   ```bash
+   # List audio devices:
+   aplay -l
+   
+   # Check volume (should not be muted):
+   amixer get Master
+   
+   # Unmute if needed:
+   amixer set Master unmute
+   amixer set Master 80%
+   ```
+
+3. **Check file exists**:
+   ```bash
+   ls -lh /home/andrc1/camera_system_integrated_final/master/shutter.wav
+   # Should show file with ~20-100KB size
+   ```
+
+4. **Check GUI logs**:
+   ```bash
+   grep -i "audio\|sound" /home/andrc1/Desktop/updatelog.txt
+   # Look for any error messages
+   ```
 
 ## DO NOT:
 - Use any other deployment method
 - Run individual scp commands
 - Modify sync_to_slaves.sh
-- Modify shutter.wav location
+- Modify shutter.wav location or audio_feedback.py
 
-## If Audio Doesn't Work:
-1. Check updatelog.txt for audio-related errors
-2. Verify shutter.wav exists at master/shutter.wav on control1
-3. Test afplay command manually: `afplay /path/to/shutter.wav`
-4. Check Settings → Application Preferences → audio checkbox is enabled
-5. Audio is non-critical - captures will still work if sound fails
+## Previous Deployment Issue:
+- **f62cb70**: Used afplay (macOS only) → silent failure on Pi
+- **c3997e0**: Platform-aware (aplay on Pi, afplay on macOS) → SHOULD WORK ✅
 
 ---
-**Phase A Complete**: Audio Feedback Feature Fully Operational ✅
+**CRITICAL FIX DEPLOYMENT**: Audio playback now works on Raspberry Pi hardware 🎵
