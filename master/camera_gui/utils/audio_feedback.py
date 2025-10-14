@@ -6,6 +6,7 @@ Provides simple sound notifications on macOS/Linux systems
 import subprocess
 import logging
 import os
+import sys
 from pathlib import Path
 
 
@@ -51,8 +52,19 @@ class AudioFeedback:
                                stdout=subprocess.DEVNULL, 
                                stderr=subprocess.DEVNULL)
             else:
-                # macOS afplay
-                subprocess.Popen(['afplay', self.sound_file],
+                # Platform-specific audio player
+                if sys.platform == 'darwin':
+                    # macOS: use afplay
+                    command = ['afplay', self.sound_file]
+                elif sys.platform.startswith('linux'):
+                    # Linux/Raspberry Pi: use aplay (ALSA)
+                    command = ['aplay', '-q', self.sound_file]  # -q for quiet mode
+                else:
+                    # Unsupported platform
+                    logging.debug(f"Audio playback not supported on platform: {sys.platform}")
+                    return
+                    
+                subprocess.Popen(command,
                                stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
                                
