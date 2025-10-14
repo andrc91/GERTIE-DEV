@@ -1031,6 +1031,19 @@ def main():
     # Load saved settings
     load_settings()
     
+    # CRITICAL FIX: Auto-restart video stream on first boot to ensure clean camera initialization
+    # This fixes the white image issue that occurs when both services start simultaneously at boot
+    try:
+        # Wait for video stream to fully initialize
+        time.sleep(5.0)
+        logging.info("[STILL] 🔄 Auto-restarting video stream for clean camera initialization...")
+        restart_video_stream_with_new_settings()
+        # Give the restart time to complete
+        time.sleep(3.0)
+        logging.info("[STILL] ✅ Video stream restarted - camera should now be properly initialized")
+    except Exception as e:
+        logging.warning(f"[STILL] Could not auto-restart video stream: {e}")
+    
     try:
         # Start heartbeat and command handler
         threading.Thread(target=send_slave_heartbeat, daemon=True).start()
