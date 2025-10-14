@@ -376,16 +376,16 @@ def build_camera_controls():
     # Picamera2 expects -1.0 to +1.0 where 0 = neutral (NOT 0.0 to 2.0!)
     gui_brightness = camera_settings.get('brightness', 0)
     
-    # ALWAYS SET BRIGHTNESS CONTROL - even when 0 (neutral)
-    # This ensures camera doesn't use undefined default state
-    if -50 <= gui_brightness <= 50:
-        brightness_val = gui_brightness / 50.0  # Simple division, NOT (gui+50)/50!
-        controls["Brightness"] = brightness_val
-        logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f}")
-    else:
-        # Invalid brightness, use neutral
-        controls["Brightness"] = 0.0
-        logging.warning(f"[STILL] Invalid brightness {gui_brightness}, using neutral (0.0)")
+    # REVERTED TO GOLDEN REFERENCE: Only set if NOT neutral
+    if gui_brightness != 0:
+        # Convert GUI scale (-50 to +50) to Picamera2 scale (-1.0 to +1.0)
+        if -50 <= gui_brightness <= 50:
+            brightness_val = gui_brightness / 50.0  # Simple division, NOT (gui+50)/50!
+            controls["Brightness"] = brightness_val
+            logging.info(f"[STILL] Brightness: GUI={gui_brightness} → Picamera2={brightness_val:.2f}")
+        else:
+            logging.warning(f"[STILL] Invalid brightness {gui_brightness}, skipping")
+    # If GUI brightness is 0 (neutral), don't set any brightness control
     
     if camera_settings.get('contrast', 50) != 50:
         # Contrast: 0-100 GUI to Picamera2 scale
