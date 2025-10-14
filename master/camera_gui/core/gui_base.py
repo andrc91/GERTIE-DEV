@@ -119,6 +119,9 @@ class MasterVideoGUI:
         
         # Add control buttons frame
         self.setup_control_buttons()
+        
+        # Add progress indicator frame (initially hidden)
+        self.setup_progress_indicator()
 
     def setup_control_buttons(self):
         """Setup global control buttons"""
@@ -152,6 +155,21 @@ class MasterVideoGUI:
         shortcuts_label = ttk.Label(control_frame, text=shortcuts_text, style="TLabel", font=('Arial', 9))
         shortcuts_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="ew")
 
+    def setup_progress_indicator(self):
+        """Setup progress indicator frame (initially hidden)"""
+        self.progress_frame = ttk.Frame(self.main_frame, style="TFrame")
+        
+        # Create progress bar
+        self.progress_bar = ttk.Progressbar(self.progress_frame, mode='determinate', 
+                                           maximum=100, style="TProgressbar")
+        self.progress_bar.pack(fill='x', padx=10, pady=(5, 2))
+        
+        # Create status label
+        self.progress_label = ttk.Label(self.progress_frame, text="", style="TLabel")
+        self.progress_label.pack(pady=(0, 5))
+        
+        # Frame is created but not gridded (hidden initially)
+
     def start_services(self):
         """Start background services"""
         self.network_manager.start_all_services()
@@ -159,14 +177,47 @@ class MasterVideoGUI:
     # auto_start_all_streams method removed - replaced with manual start/stop buttons
 
     def capture_all_stills(self):
-        """Capture stills from all cameras"""
+        """Capture stills from all cameras with progress feedback"""
         logging.info("Capturing stills from all cameras")
         
-        for ip in self.get_camera_ips():
-            # Play capture sound for each camera
+        camera_ips = self.get_camera_ips()
+        total = len(camera_ips)
+        
+        # Show progress bar
+        self.show_progress(total)
+        
+        for i, ip in enumerate(camera_ips, 1):
+            # Update progress
+            self.update_progress(i, total, f"Capturing camera {i}/{total}...")
+            
+            # Play capture sound and capture
             self.audio.play_capture_sound()
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
+        
+        # Show completion and hide after delay
+        self.update_progress(total, total, f"Capture complete! ({total}/{total} cameras)")
+        self.root.after(2000, self.hide_progress)  # Hide after 2 seconds
+
+    def show_progress(self, total):
+        """Show progress bar for operations"""
+        self.progress_frame.grid(row=3, column=0, columnspan=4, 
+                                sticky="ew", padx=10, pady=5)
+        self.progress_bar['value'] = 0
+        self.progress_label.config(text="Starting capture...")
+        self.root.update_idletasks()
+
+    def update_progress(self, current, total, message):
+        """Update progress bar and label"""
+        if total > 0:
+            percentage = (current / total) * 100
+            self.progress_bar['value'] = percentage
+        self.progress_label.config(text=message)
+        self.root.update_idletasks()  # Force UI update
+
+    def hide_progress(self):
+        """Hide progress bar"""
+        self.progress_frame.grid_remove()
 
     def sync_time_all_devices(self):
         """Sync time on all devices"""
