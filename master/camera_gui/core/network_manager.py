@@ -177,12 +177,15 @@ class NetworkManager:
             
             # Check if this camera is in exclusive view mode
             is_exclusive = False
-            if hasattr(self.gui, 'slave_frames') and ip in self.gui.slave_frames:
-                visible_cameras = [name for name, frame in self.gui.slave_frames.items() 
-                                 if frame.winfo_viewable()]
-                # In exclusive mode if only one camera visible and it spans multiple cells
-                if len(visible_cameras) == 1 and ip in [self.gui.slaves[cam]["ip"] for cam in visible_cameras]:
-                    is_exclusive = True
+            if hasattr(self.gui, 'exclusive_camera') and self.gui.exclusive_camera:
+                # Get the camera name for this IP
+                camera_name = None
+                for name, slave_info in self.gui.slaves.items():
+                    if slave_info.get('ip') == ip:
+                        camera_name = name
+                        break
+                # Check if this is the exclusive camera
+                is_exclusive = (camera_name == self.gui.exclusive_camera)
             
             # Use larger dimensions for exclusive mode, smaller for grid view
             if is_exclusive:
