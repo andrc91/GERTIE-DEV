@@ -235,10 +235,6 @@ class MasterVideoGUI:
     
     def toggle_camera_preview(self, camera_name):
         """Toggle exclusive camera preview - show only selected camera enlarged"""
-        # Track exclusive mode state
-        if not hasattr(self, 'exclusive_camera'):
-            self.exclusive_camera = None
-        
         # Check if we're in exclusive mode (only one camera visible)
         visible_cameras = [name for name in self.slave_frames 
                           if self.slave_frames[name].winfo_viewable()]
@@ -246,12 +242,10 @@ class MasterVideoGUI:
         if len(visible_cameras) == 1 and camera_name in visible_cameras:
             # If clicking the same camera that's exclusive, return to normal view
             logging.info(f"Returning to normal view from {camera_name}")
-            self.exclusive_camera = None
             self.show_all_cameras()
         else:
             # Enter exclusive mode for this camera
             logging.info(f"Entering exclusive view for {camera_name}")
-            self.exclusive_camera = camera_name
             
             # First hide all cameras
             for name, frame in self.slave_frames.items():
@@ -268,10 +262,6 @@ class MasterVideoGUI:
     def show_all_cameras(self):
         """Return to normal view showing all cameras in grid"""
         logging.info("Showing all camera previews in normal grid")
-        # Clear exclusive mode state
-        if hasattr(self, 'exclusive_camera'):
-            self.exclusive_camera = None
-        
         for name in self.slave_frames:
             frame = self.slave_frames[name]
             # Restore original grid position
