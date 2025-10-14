@@ -246,8 +246,7 @@ def capture_with_processing(filename):
         
         # Configure for maximum resolution still - SIMPLE like working slave201
         still_config = picam2.create_still_configuration(
-            main={"size": (4608, 2592)},  # Full sensor resolution
-            controls=build_camera_controls()
+            main={"size": (4608, 2592)}  # Full sensor resolution - NO CONTROLS like rep8
         )
         picam2.configure(still_config)
         picam2.start()
