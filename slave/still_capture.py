@@ -242,18 +242,7 @@ def capture_image():
 def capture_with_processing(filename):
     """Capture image with full processing pipeline - SIMPLIFIED WORKING VERSION"""
     try:
-        # Close any existing camera instances first (reset state)
-        try:
-            from picamera2 import Picamera2
-            # This ensures we start fresh each time
-            Picamera2.close_all()
-        except:
-            pass
-            
         picam2 = Picamera2()
-        
-        # Reset camera to defaults first
-        picam2.stop()
         
         # Configure for maximum resolution still - SIMPLE like working slave201
         still_config = picam2.create_still_configuration(
