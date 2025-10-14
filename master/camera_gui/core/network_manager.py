@@ -175,9 +175,24 @@ class NetworkManager:
             # Resize for display (improved dynamic sizing to prevent cropping)
             original_size = image.size
             
-            # Use more efficient resizing to improve GUI performance
-            max_width = 320  # Reduced back to 320 for better performance
-            max_height = 240  # Reduced back to 240 for better performance
+            # Check if this camera is in exclusive view mode
+            is_exclusive = False
+            if hasattr(self.gui, 'slave_frames') and ip in self.gui.slave_frames:
+                visible_cameras = [name for name, frame in self.gui.slave_frames.items() 
+                                 if frame.winfo_viewable()]
+                # In exclusive mode if only one camera visible and it spans multiple cells
+                if len(visible_cameras) == 1 and ip in [self.gui.slaves[cam]["ip"] for cam in visible_cameras]:
+                    is_exclusive = True
+            
+            # Use larger dimensions for exclusive mode, smaller for grid view
+            if is_exclusive:
+                # Exclusive mode - much larger preview for manual focusing
+                max_width = 960   # 3x normal width for better focusing
+                max_height = 720  # 3x normal height for better focusing
+            else:
+                # Normal grid mode - efficient size for 8 cameras
+                max_width = 320  # Reduced back to 320 for better performance
+                max_height = 240  # Reduced back to 240 for better performance
             
             # Calculate aspect ratios
             original_ratio = original_size[0] / original_size[1]
@@ -194,7 +209,11 @@ class NetworkManager:
                 new_width = int(max_height * original_ratio)
             
             # Use faster resize method for better GUI performance
-            image = image.resize((new_width, new_height), Image.Resampling.NEAREST)
+            # Use higher quality resizing for exclusive mode where detail matters for focusing
+            if is_exclusive:
+                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            else:
+                image = image.resize((new_width, new_height), Image.Resampling.NEAREST)
             image_tk = ImageTk.PhotoImage(image)
             
             # Update GUI thread-safely
