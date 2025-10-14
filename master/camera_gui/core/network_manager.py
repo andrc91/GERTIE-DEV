@@ -195,23 +195,41 @@ class NetworkManager:
             
             # Use faster resize method for better GUI performance
             image = image.resize((new_width, new_height), Image.Resampling.NEAREST)
-            image_tk = ImageTk.PhotoImage(image)
             
-            # Update GUI thread-safely
+            # Update GUI thread-safely - pass PIL Image for GUI thread to handle sizing
             if ip in self.gui.video_labels:
                 self.gui.root.after_idle(
-                    lambda: self.update_video_display_safe(ip, image_tk)
+                    lambda: self.update_video_display_safe(ip, image)
                 )
                 
         except Exception as e:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
-    def update_video_display_safe(self, ip, image_tk):
-        """Thread-safe video display update"""
+    def update_video_display_safe(self, ip, pil_image):
+        """Thread-safe video display update with dynamic sizing for exclusive mode"""
         try:
             if ip in self.gui.video_labels:
+                # Check if this camera is in exclusive view mode (GUI thread = safe to check state)
+                is_exclusive = False
+                if hasattr(self.gui, 'exclusive_camera') and self.gui.exclusive_camera:
+                    # Find camera name for this IP
+                    for name, slave_info in self.gui.slaves.items():
+                        if slave_info.get('ip') == ip and name == self.gui.exclusive_camera:
+                            is_exclusive = True
+                            break
+                
+                # Resize for exclusive mode if needed
+                if is_exclusive:
+                    # Enlarge for manual focusing - 3x normal size
+                    display_image = pil_image.resize((960, 720), Image.Resampling.LANCZOS)
+                else:
+                    # Keep normal grid size
+                    display_image = pil_image
+                
+                # Convert to PhotoImage and update label
+                image_tk = ImageTk.PhotoImage(display_image)
                 self.gui.video_labels[ip].config(image=image_tk, text="")
-                self.gui.video_labels[ip].image = image_tk
+                self.gui.video_labels[ip].image = image_tk  # Keep reference to prevent garbage collection
         except Exception as e:
             logging.error(f"Error updating video display for {ip}: {e}")
 
