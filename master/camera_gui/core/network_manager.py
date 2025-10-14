@@ -172,29 +172,8 @@ class NetworkManager:
             # Remote cameras send RGB data as JPEG 
             # No color swap needed - JPEG decoding handles this correctly
             
-            # Resize for display (improved dynamic sizing to prevent cropping)
-            original_size = image.size
-            
-            # Use more efficient resizing to improve GUI performance
-            max_width = 320  # Reduced back to 320 for better performance
-            max_height = 240  # Reduced back to 240 for better performance
-            
-            # Calculate aspect ratios
-            original_ratio = original_size[0] / original_size[1]
-            target_ratio = max_width / max_height
-            
-            # Scale to fit within max dimensions while preserving aspect ratio
-            if original_ratio > target_ratio:
-                # Image is wider than target - fit by width
-                new_width = max_width
-                new_height = int(max_width / original_ratio)
-            else:
-                # Image is taller than target - fit by height
-                new_height = max_height
-                new_width = int(max_height * original_ratio)
-            
-            # Use faster resize method for better GUI performance
-            image = image.resize((new_width, new_height), Image.Resampling.NEAREST)
+            # Pass ORIGINAL image to GUI thread - let it decide sizing based on exclusive mode
+            # No pre-resize here to preserve quality for exclusive mode enlargement
             
             # Update GUI thread-safely - pass PIL Image for GUI thread to handle sizing
             if ip in self.gui.video_labels:
@@ -223,8 +202,8 @@ class NetworkManager:
                     # Enlarge for manual focusing - 3x normal size
                     display_image = pil_image.resize((960, 720), Image.Resampling.LANCZOS)
                 else:
-                    # Keep normal grid size
-                    display_image = pil_image
+                    # Normal grid size - downscale from original for performance
+                    display_image = pil_image.resize((320, 240), Image.Resampling.LANCZOS)
                 
                 # Convert to PhotoImage and update label
                 image_tk = ImageTk.PhotoImage(display_image)
