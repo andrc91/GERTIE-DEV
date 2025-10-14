@@ -18,7 +18,14 @@ class AudioFeedback:
         
     def _get_default_sound(self):
         """Get platform-appropriate default sound"""
-        # macOS system sounds
+        # Use project's shutter.wav sound
+        # Path from audio_feedback.py (camera_gui/utils/) to shutter.wav (master/)
+        sound_file = Path(__file__).parent.parent.parent / "shutter.wav"
+        
+        if sound_file.exists():
+            return str(sound_file)
+        
+        # Fallback to macOS system sounds if shutter.wav not found
         macos_sounds = [
             '/System/Library/Sounds/Pop.aiff',
             '/System/Library/Sounds/Tink.aiff',
