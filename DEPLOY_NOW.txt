@@ -1,20 +1,22 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: 2025-10-14 18:07:00
-Commit: c3997e0 Fix: Platform-aware audio playback - use aplay on Linux, afplay on macOS
+Date: 2025-10-14 18:20:00
+Commits: 
+- 81cc7af Feature: Play shutter sound for each camera during Capture All (8 sounds for 8 cameras)
+- c3997e0 Fix: Platform-aware audio playback - use aplay on Linux, afplay on macOS
 
-## CRITICAL FIX: Audio Playback on Raspberry Pi
+## ENHANCEMENT: Per-Camera Audio Feedback
 
-### Root Cause:
-- Previous deployment (f62cb70) used macOS-specific `afplay` command
-- Raspberry Pi runs Linux and doesn't have `afplay`
-- Result: Silent failure - captures worked but no sound played
+### What Changed:
+✅ **Capture All** now plays shutter.wav sound for EACH camera (8 times)
+✅ Platform fix ensures audio works on Raspberry Pi (aplay)
+✅ Individual captures still play single sound (unchanged)
 
-### Fix Applied:
-✅ Added platform detection (sys.platform)
-✅ Linux/Pi: Uses `aplay -q` (ALSA audio player, built-in)
-✅ macOS: Uses `afplay` (native audio player)
-✅ Maintains non-blocking, silent failure behavior
+### User Experience Improvement:
+**Before**: Click "Capture All" → hear 1 shutter sound at start
+**After**: Click "Capture All" → hear 8 rapid shutter sounds (burst mode)
+
+Each sound corresponds to one camera capturing, giving clear audible feedback for the multi-camera capture sequence.
 
 ### MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
@@ -22,88 +24,75 @@ Commit: c3997e0 Fix: Platform-aware audio playback - use aplay on Linux, afplay 
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test Audio Feature (see below)
+6. Test Enhanced Audio Feature (see below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
 ## Testing Procedure:
-### Audio Playback Test:
-1. **Manual Command Test** (RECOMMENDED FIRST):
-   ```bash
-   # On control1, test aplay directly:
-   aplay /home/andrc1/camera_system_integrated_final/master/shutter.wav
-   # Should hear shutter sound immediately
-   ```
 
-2. **GUI Audio Test**:
-   - Launch GUI: ./run_gui_with_logging.sh
-   - Settings → Application Preferences → Verify "Enable Audio Feedback" is checked
-   - Click "Capture All Cameras" button → **SHOULD HEAR SHUTTER.WAV SOUND** 🔊
-   - Click individual "Capture" on any camera → **SHOULD HEAR SHUTTER.WAV SOUND** 🔊
-   - Uncheck "Enable Audio Feedback" → captures should be silent
-   - Re-check "Enable Audio Feedback" → should hear test sound + captures have sound again
+### 1. Verify Audio Works (Platform Fix):
+```bash
+# Manual test on control1:
+aplay /home/andrc1/camera_system_integrated_final/master/shutter.wav
+# Should hear shutter sound ✅
+```
 
-3. **Persistence Test**:
-   - Close GUI, reopen → audio setting should be remembered
+### 2. Test Capture All Enhancement:
+- Launch GUI: ./run_gui_with_logging.sh
+- Settings → Application Preferences → Verify "Enable Audio Feedback" is checked
+- Click **"Capture All Cameras"** button
+- **Expected**: Hear **8 RAPID SHUTTER SOUNDS** in sequence over ~0.8 seconds 🎵🎵🎵🎵🎵🎵🎵🎵
+- Each sound = one camera capturing
+- Should feel like professional burst/sequence capture
+
+### 3. Test Individual Capture (Unchanged):
+- Click individual "Capture" button on any camera
+- **Expected**: Hear **1 SHUTTER SOUND** per button press
+- This behavior is unchanged from previous version
+
+### 4. Test Settings:
+- Uncheck "Enable Audio Feedback" → captures should be silent
+- Re-check "Enable Audio Feedback" → should hear test sound + captures have sound again
+- Close/reopen GUI → setting should persist
 
 ## Expected Result:
-✅ **AUDIBLE shutter.wav sound plays on EVERY capture** (both "Capture All" and individual)
-✅ Sound plays on Linux/Raspberry Pi using aplay command
-✅ Silence when audio disabled in settings
-✅ Setting persists across GUI restarts
-✅ Non-blocking operation (captures don't wait for sound to finish)
+✅ **Capture All**: 8 shutter sounds (one per camera) - burst mode feedback
+✅ **Individual Capture**: 1 shutter sound per button press
+✅ **Platform Compatibility**: Works on Raspberry Pi using aplay
+✅ **Settings**: Audio can be toggled on/off, persists across restarts
+✅ **Non-blocking**: Captures don't wait for sounds to finish
 
 ## Technical Details:
-- **Platform Detection**: sys.platform == 'darwin' (macOS) or 'linux' (Pi)
-- **Linux Command**: `aplay -q /path/to/shutter.wav` (-q = quiet, no terminal output)
-- **macOS Command**: `afplay /path/to/shutter.wav`
-- **Sound File**: master/shutter.wav (deployed to Pi)
-- **Process**: Non-blocking subprocess.Popen
-- **Error Handling**: Silent failure with debug logging (audio is non-critical)
+- **Capture All Sequence**: 8 cameras × (audio + CAPTURE_STILL + 0.1s delay)
+- **Total Duration**: ~0.8 seconds for full sequence
+- **Audio Command**: `aplay -q /path/to/shutter.wav` on Linux
+- **Sound Timing**: Plays BEFORE each capture command (good UX)
+- **Non-blocking**: subprocess.Popen with DEVNULL redirects
+
+## Behavior Summary:
+
+| Action | Audio Behavior | Count |
+|--------|----------------|-------|
+| **Capture All** | Rapid burst of sounds | 8 sounds |
+| **Individual Capture** | Single sound | 1 sound |
+| **Settings Toggle** | Test sound on enable | 1 sound |
 
 ## Troubleshooting:
-### If audio still doesn't work:
-1. **Test aplay manually**:
-   ```bash
-   aplay /home/andrc1/camera_system_integrated_final/master/shutter.wav
-   ```
-   - If this works: Problem is in Python code integration
-   - If this fails: Check audio hardware/volume settings
-
-2. **Check audio hardware**:
-   ```bash
-   # List audio devices:
-   aplay -l
-   
-   # Check volume (should not be muted):
-   amixer get Master
-   
-   # Unmute if needed:
-   amixer set Master unmute
-   amixer set Master 80%
-   ```
-
-3. **Check file exists**:
-   ```bash
-   ls -lh /home/andrc1/camera_system_integrated_final/master/shutter.wav
-   # Should show file with ~20-100KB size
-   ```
-
-4. **Check GUI logs**:
-   ```bash
-   grep -i "audio\|sound" /home/andrc1/Desktop/updatelog.txt
-   # Look for any error messages
-   ```
+If audio doesn't work, see previous deployment instructions (e063f25) for:
+- Audio hardware checks (`aplay -l`, `amixer`)
+- Volume settings
+- File existence verification
+- Log analysis
 
 ## DO NOT:
 - Use any other deployment method
 - Run individual scp commands
 - Modify sync_to_slaves.sh
-- Modify shutter.wav location or audio_feedback.py
 
-## Previous Deployment Issue:
-- **f62cb70**: Used afplay (macOS only) → silent failure on Pi
-- **c3997e0**: Platform-aware (aplay on Pi, afplay on macOS) → SHOULD WORK ✅
+## Change History:
+- **54f73b8**: Added audio to individual captures (1 sound per button)
+- **c3997e0**: Platform fix - aplay on Linux (CRITICAL BUG FIX)
+- **81cc7af**: Enhanced Capture All - 8 sounds for 8 cameras (THIS DEPLOYMENT)
 
 ---
-**CRITICAL FIX DEPLOYMENT**: Audio playback now works on Raspberry Pi hardware 🎵
+**ENHANCED AUDIO FEEDBACK**: Professional burst capture with per-camera sound 🎵×8
