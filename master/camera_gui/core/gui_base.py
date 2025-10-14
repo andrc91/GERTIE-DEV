@@ -31,6 +31,9 @@ class MasterVideoGUI:
         self.expected_images = 0
         self.received_images = 0
         
+        # Camera state tracking
+        self.camera_states = {}  # Track state per camera IP
+        
         self.setup_window()
         self.setup_styles()
         
@@ -195,6 +198,9 @@ class MasterVideoGUI:
         self.show_progress(total)
         
         for i, ip in enumerate(camera_ips, 1):
+            # Update state to CAPTURING
+            self.update_camera_state(ip, "CAPTURING")
+            
             # Update progress for sending commands
             self.update_progress(i, total, f"Sending capture command {i}/{total}...")
             
@@ -202,6 +208,12 @@ class MasterVideoGUI:
             self.audio.play_capture_sound()
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
+            
+            # Return to previous state (STREAMING or IDLE)
+            # Check if camera was streaming before capture
+            if self.camera_states.get(ip) == "CAPTURING":
+                # Default back to IDLE after capture
+                self.root.after(1000, lambda ip=ip: self.update_camera_state(ip, "IDLE"))
         
         # Update status to waiting for images
         self.update_progress(total, total, f"Waiting for images... (0/{total} received)")
@@ -244,6 +256,24 @@ class MasterVideoGUI:
                 # Hide after showing completion
                 self.root.after(2000, self.hide_progress)
 
+    def update_camera_state(self, ip, state):
+        """Update visual state indicator for a camera"""
+        self.camera_states[ip] = state
+        
+        # Update state label if camera frame exists
+        if hasattr(self.camera_manager, 'camera_frames') and ip in self.camera_manager.camera_frames:
+            camera_frame = self.camera_manager.camera_frames[ip]
+            if camera_frame.state_label:
+                # Set color based on state
+                colors = {
+                    "IDLE": ("gray40", "white"),
+                    "STREAMING": ("green4", "white"),
+                    "CAPTURING": ("goldenrod3", "white"),
+                    "ERROR": ("red3", "white")
+                }
+                bg, fg = colors.get(state, ("gray40", "white"))
+                camera_frame.state_label.config(text=state, bg=bg, fg=fg)
+
     def sync_time_all_devices(self):
         """Sync time on all devices"""
         from tkinter import messagebox
@@ -266,6 +296,9 @@ class MasterVideoGUI:
     def start_all_video_streams(self):
         """Manually start all video streams - user controlled"""
         logging.info("User-triggered: Starting all video streams...")
+        # Update states to STREAMING
+        for ip in self.get_camera_ips():
+            self.update_camera_state(ip, "STREAMING")
         self.camera_manager.start_all_streams()
 
     def stop_all_video_streams(self):
@@ -273,6 +306,7 @@ class MasterVideoGUI:
         logging.info("User-triggered: Stopping all video streams...")
         for ip in self.get_camera_ips():
             self.network_manager.send_command(ip, "STOP_STREAM")
+            self.update_camera_state(ip, "IDLE")
 
     def get_camera_ips(self):
         """Get list of all camera IPs"""

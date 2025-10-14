@@ -20,6 +20,7 @@ class CameraFrame:
         self.frame = None
         self.video_label = None
         self.heartbeat_label = None
+        self.state_label = None  # Add state label
         
         self.create_frame(parent_frame, row, col)
 
@@ -55,8 +56,15 @@ class CameraFrame:
         name_label = ttk.Label(header_frame, text=name_text, style="Dark.TLabel")
         name_label.grid(row=0, column=0, sticky="w")
         
+        # State badge (IDLE/STREAMING/CAPTURING)
+        self.state_label = tk.Label(header_frame, text="IDLE", 
+                                   bg="gray40", fg="white", 
+                                   font=('Arial', 8, 'bold'),
+                                   padx=4, pady=1)
+        self.state_label.grid(row=0, column=1, sticky="e", padx=(0, 5))
+        
         self.heartbeat_label = ttk.Label(header_frame, text="🔴", foreground="red", style="Dark.TLabel")
-        self.heartbeat_label.grid(row=0, column=1, sticky="e")
+        self.heartbeat_label.grid(row=0, column=2, sticky="e")
         
         # Store in parent GUI for heartbeat updates
         self.parent_gui.heartbeat_labels[self.ip] = self.heartbeat_label
