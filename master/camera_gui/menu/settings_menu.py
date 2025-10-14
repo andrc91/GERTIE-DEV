@@ -46,6 +46,9 @@ class SettingsMenuManager:
         # Device management
         settings_menu.add_separator()
         settings_menu.add_command(
+            label="Application Preferences...", command=self.open_app_preferences
+        )
+        settings_menu.add_command(
             label="Device Names...", command=self.open_device_naming
         )
         settings_menu.add_command(
@@ -72,6 +75,10 @@ class SettingsMenuManager:
         from dialogs.device_naming import DeviceNamingDialog
 
         DeviceNamingDialog(self.gui)
+    
+    def open_app_preferences(self):
+        """Open application preferences dialog"""
+        AppPreferencesDialog(self.gui)
 
     def reset_all_cameras(self):
         """Reset all cameras to defaults"""
@@ -427,3 +434,61 @@ class CameraSettingsDialog:
         print(f"✅ Settings package sent to {self.ip}")
         messagebox.showinfo("Settings Applied", f"Settings applied to {self.ip}")
         self.window.destroy()
+
+
+class AppPreferencesDialog:
+    """Application preferences dialog"""
+    
+    def __init__(self, gui):
+        self.gui = gui
+        
+        self.window = tk.Toplevel(gui.root)
+        self.window.title("Application Preferences")
+        self.window.geometry("400x200")
+        self.window.resizable(False, False)
+        
+        # Create main frame
+        main_frame = ttk.Frame(self.window, padding="20")
+        main_frame.pack(fill="both", expand=True)
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Application Preferences", 
+                               font=("Arial", 14, "bold"))
+        title_label.pack(pady=(0, 20))
+        
+        # Audio feedback checkbox
+        self.audio_var = tk.BooleanVar(value=self.gui.audio.enabled)
+        audio_check = ttk.Checkbutton(
+            main_frame,
+            text="Enable Audio Feedback (sound on capture)",
+            variable=self.audio_var,
+            command=self.on_audio_toggle
+        )
+        audio_check.pack(pady=10, anchor="w")
+        
+        # Info label
+        info_label = ttk.Label(main_frame, 
+                              text="Plays a sound effect when capturing images from cameras",
+                              font=("Arial", 9),
+                              foreground="gray")
+        info_label.pack(pady=(0, 20), anchor="w")
+        
+        # Buttons frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(side="bottom", fill="x", pady=(20, 0))
+        
+        # Close button
+        close_button = ttk.Button(button_frame, text="Close", command=self.window.destroy)
+        close_button.pack(side="right")
+    
+    def on_audio_toggle(self):
+        """Handle audio checkbox toggle"""
+        enabled = self.audio_var.get()
+        self.gui.audio.set_enabled(enabled)
+        
+        # Save preference
+        self.gui.save_app_preferences({'audio_feedback_enabled': enabled})
+        
+        # Play sound to test if enabling
+        if enabled:
+            self.gui.audio.play_capture_sound()
