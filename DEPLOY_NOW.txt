@@ -1,111 +1,44 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: Tue Oct 14 15:48:00 BST 2025
-Commit: 9044cee - Fix: Set exclusive_camera state variable for video resize detection
+Date: 2025-10-14 16:50:00
+Commit: 6bb8aad - Fix: Replace broken slaves lookup with exclusive_ip direct comparison
+
+## CRITICAL: Previous Deployment Had TOTAL VIDEO FAILURE
+The last deployment (d5e8d40) caused AttributeError on EVERY frame:
+- Error: 'MasterVideoGUI' object has no attribute 'slaves'
+- Result: NO VIDEO DISPLAYED AT ALL - completely black screens
+- Not just a resize issue - video was completely broken!
+
+## THIS DEPLOYMENT FIXES THE ATTRIBUTE ERROR
+Changed from broken `self.gui.slaves` lookup to direct `exclusive_ip` comparison
 
 ## MANDATORY STEPS (NO ALTERNATIVES):
-1. Copy camera_system_integrated_final to USB drive
-2. On control1 Pi: cp -r /media/USB/camera_system_integrated_final /home/andrc1/
+1. Copy camera_system_integrated_final to USB
+2. On control1: cp -r /media/USB/camera_system_integrated_final /home/andrc1/
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test: Start video streams
-7. Test: Press keys 1-8 to enter exclusive mode - **VIDEO MUST VISIBLY ENLARGE**
-8. Test: Verify video is SHARP in exclusive mode (not blurry/pixelated)
-9. Test: Press 0 to return to grid - verify videos return to normal size
-10. Test: Capture images in both modes
-11. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
-12. Return updatelog.txt to MacBook for analysis
-
-## CRITICAL FIX DETAILS:
-**Root Problem**: The exclusive_camera state variable was NEVER being set by the GUI!
-
-**What Was Happening**:
-1. Previous deployment (b8c75a1) included video resize logic in network_manager.py
-2. This logic checked: "if self.gui.exclusive_camera == camera_name, resize to 960x720"
-3. BUT gui_base.py NEVER set self.exclusive_camera = camera_name
-4. Result: Resize check always failed, video stayed 320x240
-5. Frame got bigger (visual container), but video inside stayed small
-
-**The Complete Solution** (2 commits):
-- **Commit 9eaceb2**: Removed double-resize quality issue (deployed in b8c75a1)
-- **Commit 9044cee**: Added missing state variable assignments (THIS DEPLOYMENT)
-
-**Files Changed in This Deployment**: master/camera_gui/core/gui_base.py
-  - Line 251: `self.exclusive_camera = camera_name` (set when entering exclusive)
-  - Line 270: `self.exclusive_camera = None` (clear when returning to grid)
-
-**How It Works Now**:
-1. User presses number key (e.g., 5 for rep5)
-2. show_exclusive_preview() called
-3. **NEW**: Sets `self.exclusive_camera = 'rep5'`
-4. Frame enlarges to span grid
-5. Video frames processed by network_manager
-6. Checks: "Is 192.168.0.205 the IP for rep5?" → YES
-7. Checks: "Is rep5 == self.exclusive_camera?" → YES
-8. **Resizes video to 960x720** (3x normal size)
-9. User presses 0 to exit
-10. **NEW**: Sets `self.exclusive_camera = None`
-11. Videos return to 320x240
+6. Test:
+   - FIRST: Verify video streams show from all 8 cameras (was broken before!)
+   - Press keys 1-8: Each camera should enlarge to 960x720
+   - Press 0: Return to grid with all at 320x240
+   - Verify smooth transitions, no AttributeError in logs
+7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
+8. Return updatelog.txt to MacBook
 
 ## Expected Result:
-✓ Video streaming visible from all cameras (rep1-rep8)
-✓ **CRITICAL: Pressing keys 1-8 makes video ENLARGE and SHARP**
-✓ Video fills the exclusive frame (not small in a big frame)
-✓ Quality is high in exclusive mode (suitable for manual focusing)
-✓ Pressing 0 returns all videos to normal 320x240 size
-✓ Smooth transitions between modes
-✓ Capture works in both grid and exclusive modes
+✅ Video streams ACTUALLY VISIBLE (were broken in d5e8d40!)
+✅ No more AttributeError spam in logs
+✅ Exclusive mode: Video enlarges to 960x720 (3x normal)
+✅ Grid mode: All videos at 320x240
+✅ Smooth transitions between modes
 
-## VISUAL VERIFICATION:
-**Grid Mode** (press 0):
-- 8 small video previews (320x240 each)
-- All cameras visible simultaneously
-
-**Exclusive Mode** (press 1-8):
-- ONE large video preview filling most of screen
-- **VIDEO MUST BE VISIBLY LARGER** (not just the frame)
-- Sharp enough to manually focus camera
-- Text/details clearly visible
-
-## WHY PREVIOUS DEPLOYMENT FAILED:
-Previous deployment (b8c75a1) had the resize CODE but missing the STATE TRACKING.
-It's like having a light switch (resize logic) but no way to turn it on (state variable).
-
-## TESTING PRIORITY:
-1. **CRITICAL**: Press number key, verify VIDEO enlarges (not just frame)
-2. **CRITICAL**: Verify enlarged video is sharp/clear (high quality)
-3. Verify grid mode still works normally
-4. Test state transitions: grid → exclusive → grid → different exclusive
-5. Verify capture works in both modes
+## Fixed Issues:
+1. AttributeError: Removed broken self.gui.slaves lookup
+2. Now uses direct exclusive_ip comparison (cleaner, faster)
+3. Both exclusive_camera name and IP stored for efficient checking
 
 ## DO NOT:
-- Use any other deployment method besides sync_to_slaves.sh
-- Skip visual verification that VIDEO (not frame) enlarges
-- Proceed without testing multiple cameras in exclusive mode
-- Assume it works without confirming size change
-
-## IF VIDEO STILL DOESN'T ENLARGE:
-This would indicate a different issue. Check:
-1. Verify commit 9044cee is actually deployed (git log on control1)
-2. Check if GUI code was properly copied to control1
-3. Look for Python errors in GUI output related to exclusive_camera
-4. Return updatelog.txt with detailed GUI logs
-
-## SUCCESS CRITERIA:
-✅ All 8 cameras show live video preview
-✅ **Pressing number keys makes VIDEO visibly enlarge** (fills frame)
-✅ **Enlarged video is SHARP and HIGH QUALITY**
-✅ Pressing 0 makes videos return to small size
-✅ Smooth mode transitions without errors
-✅ Capture works in both modes
-✅ No errors in updatelog.txt
-
-## TECHNICAL SUMMARY:
-This fix completes the exclusive mode video enlargement feature by connecting two pieces:
-1. Resize logic in network_manager.py (from commit 9eaceb2, already deployed)
-2. State tracking in gui_base.py (from commit 9044cee, THIS deployment)
-
-Together they enable the video stream to know when to resize itself based on which camera
-is currently in exclusive view. Without both pieces, the resize logic exists but never
-activates because it can't detect exclusive mode.
+- Use any other deployment method
+- Run individual scp commands
+- Modify sync_to_slaves.sh
