@@ -530,6 +530,11 @@ def handle_local_commands():
     """Enhanced command handler (same as working version)"""
     global streaming, jpeg_quality, camera_settings, video_thread
     
+    # Ensure clean initial state
+    with streaming_lock:
+        streaming = False
+        logging.info("[LOCAL] Reset streaming flag to False on startup")
+    
     logging.info(f"Starting command handler on port {LOCAL_CONTROL_PORT}")
     
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -555,11 +560,14 @@ def handle_local_commands():
 
             if command == "START_STREAM":
                 logging.info("Processing START_STREAM command")
-                if not streaming:
+                with streaming_lock:
+                    current_state = streaming
+                if not current_state:
+                    logging.info("Starting video thread (streaming was False)")
                     video_thread = threading.Thread(target=start_local_video_stream, daemon=True)
                     video_thread.start()
                 else:
-                    logging.info("Stream already running")
+                    logging.info(f"Stream already running (streaming = {current_state})")
                     
             elif command == "STOP_STREAM":
                 logging.info("Processing STOP_STREAM command")
