@@ -211,8 +211,11 @@ class MasterVideoGUI:
     
     def setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts for efficient workflow"""
-        # Space bar - Capture all cameras
-        self.root.bind('<space>', lambda e: self.capture_all_stills())
+        # Space bar - Capture all cameras (prevent default button activation)
+        def handle_space(event):
+            self.capture_all_stills()
+            return "break"  # Stop event propagation to prevent button animation
+        self.root.bind('<space>', handle_space)
         
         # Number keys 1-8 - Toggle individual camera preview
         for i in range(1, 9):
