@@ -14,6 +14,7 @@ from widgets.camera_frame import CameraFrameManager
 from menu.settings_menu import SettingsMenuManager
 from menu.system_menu import SystemMenuManager
 from core.network_manager import NetworkManager
+from utils import audio_feedback
 
 
 class MasterVideoGUI:
@@ -35,6 +36,10 @@ class MasterVideoGUI:
         self.gallery_panel = None
         self.settings_menu = SettingsMenuManager(self)
         self.system_menu = SystemMenuManager(self)
+        
+        # Initialize audio feedback and load preferences
+        self.audio = audio_feedback.get_audio_feedback()
+        self.load_app_preferences()
         
         # Setup UI
         self.setup_menu_bar()
@@ -156,6 +161,10 @@ class MasterVideoGUI:
     def capture_all_stills(self):
         """Capture stills from all cameras"""
         logging.info("Capturing stills from all cameras")
+        
+        # Play capture sound if enabled
+        self.audio.play_capture_sound()
+        
         for ip in self.get_camera_ips():
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
@@ -307,3 +316,39 @@ class MasterVideoGUI:
             self.settings_menu.open_camera_settings(first_ip)
         else:
             logging.warning("Settings menu not properly initialized")
+    
+    def load_app_preferences(self):
+        """Load application preferences from JSON file"""
+        import json
+        import os
+        
+        prefs_file = os.path.join(os.path.dirname(__file__), '..', 'app_preferences.json')
+        
+        try:
+            if os.path.exists(prefs_file):
+                with open(prefs_file, 'r') as f:
+                    prefs = json.load(f)
+                    
+                # Apply audio preference
+                audio_enabled = prefs.get('audio_feedback_enabled', True)
+                self.audio.set_enabled(audio_enabled)
+                logging.info(f"Loaded preferences: audio_feedback={audio_enabled}")
+            else:
+                # Default preferences
+                self.save_app_preferences({'audio_feedback_enabled': True})
+        except Exception as e:
+            logging.error(f"Failed to load app preferences: {e}")
+    
+    def save_app_preferences(self, prefs):
+        """Save application preferences to JSON file"""
+        import json
+        import os
+        
+        prefs_file = os.path.join(os.path.dirname(__file__), '..', 'app_preferences.json')
+        
+        try:
+            with open(prefs_file, 'w') as f:
+                json.dump(prefs, f, indent=4)
+            logging.info(f"Saved preferences: {prefs}")
+        except Exception as e:
+            logging.error(f"Failed to save app preferences: {e}")
