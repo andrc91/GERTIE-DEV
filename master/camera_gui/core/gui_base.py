@@ -40,6 +40,9 @@ class MasterVideoGUI:
         self.setup_menu_bar()
         self.setup_layout()
         
+        # Setup keyboard shortcuts
+        self.setup_keyboard_shortcuts()
+        
         # Start network services
         self.start_services()
         
@@ -120,8 +123,9 @@ class MasterVideoGUI:
         control_frame.grid_columnconfigure(1, weight=1)
         control_frame.grid_rowconfigure(0, weight=1)
         control_frame.grid_rowconfigure(1, weight=1)
+        control_frame.grid_rowconfigure(2, weight=1)  # Add row for shortcuts
         
-        self.capture_all_button = ttk.Button(control_frame, text="Capture All Cameras", 
+        self.capture_all_button = ttk.Button(control_frame, text="Capture All Cameras [Space]", 
                                            command=self.capture_all_stills, style="Dark.TButton")
         self.capture_all_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         
@@ -137,6 +141,11 @@ class MasterVideoGUI:
         self.stop_streams_button = ttk.Button(control_frame, text="Stop All Video Streams", 
                                             command=self.stop_all_video_streams, style="Dark.TButton")
         self.stop_streams_button.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Add keyboard shortcuts help text
+        shortcuts_text = "Shortcuts: [Space] Capture All | [1-8] Toggle Camera | [S] Settings | [G] Gallery | [R] Restart | [Ctrl+Q] Quit"
+        shortcuts_label = ttk.Label(control_frame, text=shortcuts_text, style="TLabel", font=('Arial', 9))
+        shortcuts_label.grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="ew")
 
     def start_services(self):
         """Start background services"""
@@ -191,3 +200,59 @@ class MasterVideoGUI:
             if details["ip"] == ip:
                 return name
         return ip
+    
+    def setup_keyboard_shortcuts(self):
+        """Setup keyboard shortcuts for efficient workflow"""
+        # Space bar - Capture all cameras
+        self.root.bind('<space>', lambda e: self.capture_all_stills())
+        
+        # Number keys 1-8 - Toggle individual camera preview
+        for i in range(1, 9):
+            camera_name = f'rep{i}'
+            if camera_name in config.SLAVES:
+                self.root.bind(str(i), lambda e, name=camera_name: self.toggle_camera_preview(name))
+        
+        # S key - Open settings menu
+        self.root.bind('<s>', lambda e: self.settings_menu.open_settings())
+        self.root.bind('<S>', lambda e: self.settings_menu.open_settings())
+        
+        # G key - Open gallery
+        self.root.bind('<g>', lambda e: self.open_gallery())
+        self.root.bind('<G>', lambda e: self.open_gallery())
+        
+        # R key - Restart all streams
+        self.root.bind('<r>', lambda e: self.restart_all_streams())
+        self.root.bind('<R>', lambda e: self.restart_all_streams())
+        
+        # Escape key - Close dialogs (handled by individual dialogs)
+        # Ctrl+Q - Quit application
+        self.root.bind('<Control-q>', lambda e: self.root.quit())
+        
+        logging.info("Keyboard shortcuts initialized")
+    
+    def toggle_camera_preview(self, camera_name):
+        """Toggle individual camera preview visibility"""
+        if camera_name in self.slave_frames:
+            frame = self.slave_frames[camera_name]
+            if frame.winfo_viewable():
+                frame.grid_remove()
+                logging.info(f"Hiding camera preview: {camera_name}")
+            else:
+                # Find the appropriate position
+                idx = list(config.SLAVES.keys()).index(camera_name)
+                row = idx // 4
+                col = idx % 4
+                frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                logging.info(f"Showing camera preview: {camera_name}")
+    
+    def open_gallery(self):
+        """Open the gallery panel"""
+        if self.gallery_panel:
+            self.gallery_panel.show()
+    
+    def restart_all_streams(self):
+        """Restart all video streams"""
+        logging.info("Restarting all video streams via keyboard shortcut")
+        self.stop_all_video_streams()
+        time.sleep(1)
+        self.start_all_video_streams()
