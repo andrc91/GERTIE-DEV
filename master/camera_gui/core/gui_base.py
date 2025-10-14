@@ -212,9 +212,9 @@ class MasterVideoGUI:
             if camera_name in config.SLAVES:
                 self.root.bind(str(i), lambda e, name=camera_name: self.toggle_camera_preview(name))
         
-        # S key - Open settings menu
-        self.root.bind('<s>', lambda e: self.settings_menu.open_settings())
-        self.root.bind('<S>', lambda e: self.settings_menu.open_settings())
+        # S key - Open settings menu  
+        self.root.bind('<s>', lambda e: self.open_camera_settings_for_all())
+        self.root.bind('<S>', lambda e: self.open_camera_settings_for_all())
         
         # G key - Open gallery
         self.root.bind('<g>', lambda e: self.open_gallery())
@@ -247,8 +247,14 @@ class MasterVideoGUI:
     
     def open_gallery(self):
         """Open the gallery panel"""
-        if self.gallery_panel:
-            self.gallery_panel.show()
+        if self.gallery_panel and self.gallery_panel.panel:
+            # Toggle visibility of gallery panel
+            if self.gallery_panel.panel.winfo_viewable():
+                self.gallery_panel.panel.grid_remove()
+                logging.info("Hiding gallery panel")
+            else:
+                self.gallery_panel.panel.grid(row=0, column=0, sticky="ns")
+                logging.info("Showing gallery panel")
     
     def restart_all_streams(self):
         """Restart all video streams"""
@@ -256,3 +262,13 @@ class MasterVideoGUI:
         self.stop_all_video_streams()
         time.sleep(1)
         self.start_all_video_streams()
+    
+    def open_camera_settings_for_all(self):
+        """Open global camera settings dialog"""
+        logging.info("Opening camera settings via keyboard shortcut")
+        # Use the first camera's IP for global settings
+        first_ip = list(config.SLAVES.values())[0]["ip"]
+        if hasattr(self, 'settings_menu') and hasattr(self.settings_menu, 'open_camera_settings'):
+            self.settings_menu.open_camera_settings(first_ip)
+        else:
+            logging.warning("Settings menu not properly initialized")
