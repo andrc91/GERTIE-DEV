@@ -5,6 +5,7 @@ Individual camera frame widget and manager - FIXED VERSION
 import tkinter as tk
 from tkinter import ttk
 import logging
+import time
 
 from config.settings import config, device_names
 
@@ -155,6 +156,11 @@ class CameraFrameManager:
         logging.info("Starting all camera streams")
         for ip in self.camera_frames.keys():
             self.gui.network_manager.send_command(ip, "START_STREAM")
+            # Add small delay for rep8 initialization
+            if ip == "127.0.0.1":
+                time.sleep(0.2)
+                # Send START_STREAM again for rep8 to ensure it starts
+                self.gui.network_manager.send_command(ip, "START_STREAM")
             
     def get_camera_frame(self, ip):
         """Get camera frame by IP"""
