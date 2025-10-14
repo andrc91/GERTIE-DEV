@@ -101,6 +101,10 @@ class CameraFrame:
     def capture_still(self):
         """Capture still image"""
         logging.info(f"Capturing still from {self.ip}")
+        
+        # Play capture sound if enabled
+        self.parent_gui.audio.play_capture_sound()
+        
         self.parent_gui.network_manager.send_command(self.ip, "CAPTURE_STILL")
 
     def open_options(self):
