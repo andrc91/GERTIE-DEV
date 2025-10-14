@@ -1,7 +1,7 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: Tue Oct 14 15:35:00 BST 2025
-Commit: 9eaceb2 - Fix: Remove double-resize, enable proper exclusive mode video enlargement
+Date: Tue Oct 14 15:48:00 BST 2025
+Commit: 9044cee - Fix: Set exclusive_camera state variable for video resize detection
 
 ## MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB drive
@@ -9,102 +9,103 @@ Commit: 9eaceb2 - Fix: Remove double-resize, enable proper exclusive mode video 
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test: Start video streams from all cameras
-7. Test: Press keys 1-8 to enter exclusive mode - VERIFY VIDEO ENLARGES TO FULL SIZE
-8. Test: Check video quality - should be SHARP, not pixelated/blurry
-9. Test: Press key 0 to return to grid mode
-10. Test: Capture still images in both modes
+6. Test: Start video streams
+7. Test: Press keys 1-8 to enter exclusive mode - **VIDEO MUST VISIBLY ENLARGE**
+8. Test: Verify video is SHARP in exclusive mode (not blurry/pixelated)
+9. Test: Press 0 to return to grid - verify videos return to normal size
+10. Test: Capture images in both modes
 11. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 12. Return updatelog.txt to MacBook for analysis
 
 ## CRITICAL FIX DETAILS:
-**Problem**: Double-resize causing poor quality in exclusive mode
-  - process_video_frame() pre-downscaled to 320x240 using NEAREST (low quality)
-  - update_video_display_safe() tried to upscale from 320x240 → 960x720
-  - Result: Video enlarged but blurry/pixelated (upscaling small image)
+**Root Problem**: The exclusive_camera state variable was NEVER being set by the GUI!
 
-**Impact**: 
-  - Exclusive mode video was enlarged but unusable for manual focusing
-  - Quality degradation made fine focus adjustments impossible
-  - Users couldn't effectively use exclusive mode for its intended purpose
+**What Was Happening**:
+1. Previous deployment (b8c75a1) included video resize logic in network_manager.py
+2. This logic checked: "if self.gui.exclusive_camera == camera_name, resize to 960x720"
+3. BUT gui_base.py NEVER set self.exclusive_camera = camera_name
+4. Result: Resize check always failed, video stayed 320x240
+5. Frame got bigger (visual container), but video inside stayed small
 
-**Solution**: Single-resize path preserving original quality
-  - process_video_frame() now passes ORIGINAL full-resolution image (no pre-resize)
-  - update_video_display_safe() does ALL sizing decisions:
-    * Exclusive mode: 960x720 downscaled from ORIGINAL with LANCZOS (sharp)
-    * Grid mode: 320x240 downscaled from ORIGINAL with LANCZOS (sharp)
-  - Result: High quality resize in both modes, no double-processing
+**The Complete Solution** (2 commits):
+- **Commit 9eaceb2**: Removed double-resize quality issue (deployed in b8c75a1)
+- **Commit 9044cee**: Added missing state variable assignments (THIS DEPLOYMENT)
 
-**Files Changed**: master/camera_gui/core/network_manager.py only
-  - Removed lines 175-197: Complex pre-resize logic
-  - Added lines 175-176: Comments explaining new approach
-  - Modified line 205: Grid mode now explicitly resizes from original
-  - Uses LANCZOS resampling for best quality
+**Files Changed in This Deployment**: master/camera_gui/core/gui_base.py
+  - Line 251: `self.exclusive_camera = camera_name` (set when entering exclusive)
+  - Line 270: `self.exclusive_camera = None` (clear when returning to grid)
+
+**How It Works Now**:
+1. User presses number key (e.g., 5 for rep5)
+2. show_exclusive_preview() called
+3. **NEW**: Sets `self.exclusive_camera = 'rep5'`
+4. Frame enlarges to span grid
+5. Video frames processed by network_manager
+6. Checks: "Is 192.168.0.205 the IP for rep5?" → YES
+7. Checks: "Is rep5 == self.exclusive_camera?" → YES
+8. **Resizes video to 960x720** (3x normal size)
+9. User presses 0 to exit
+10. **NEW**: Sets `self.exclusive_camera = None`
+11. Videos return to 320x240
 
 ## Expected Result:
 ✓ Video streaming visible from all cameras (rep1-rep8)
-✓ Exclusive mode (keys 1-8): VIDEO ENLARGED AND SHARP - suitable for manual focusing
-✓ Grid mode (key 0): Normal 320x240 previews - adequate quality
-✓ NO pixelation/blur in exclusive mode
-✓ Smooth video updates with no performance degradation
-✓ Manual camera focusing possible with high-quality enlarged preview
+✓ **CRITICAL: Pressing keys 1-8 makes video ENLARGE and SHARP**
+✓ Video fills the exclusive frame (not small in a big frame)
+✓ Quality is high in exclusive mode (suitable for manual focusing)
+✓ Pressing 0 returns all videos to normal 320x240 size
+✓ Smooth transitions between modes
+✓ Capture works in both grid and exclusive modes
 
-## BEFORE vs AFTER:
+## VISUAL VERIFICATION:
+**Grid Mode** (press 0):
+- 8 small video previews (320x240 each)
+- All cameras visible simultaneously
 
-**Before (commit b381049)**:
-Original (e.g. 640x480) → NEAREST downscale to 320x240 → LANCZOS upscale to 960x720
-= Blurry/pixelated exclusive view (upscaling from small)
+**Exclusive Mode** (press 1-8):
+- ONE large video preview filling most of screen
+- **VIDEO MUST BE VISIBLY LARGER** (not just the frame)
+- Sharp enough to manually focus camera
+- Text/details clearly visible
 
-**After (commit 9eaceb2)**:
-Original (e.g. 640x480) → LANCZOS downscale to 960x720 (exclusive) or 320x240 (grid)
-= Sharp exclusive view (downscaling from original)
+## WHY PREVIOUS DEPLOYMENT FAILED:
+Previous deployment (b8c75a1) had the resize CODE but missing the STATE TRACKING.
+It's like having a light switch (resize logic) but no way to turn it on (state variable).
 
 ## TESTING PRIORITY:
-1. **CRITICAL**: Verify exclusive mode video is SHARP and CLEAR
-   - Press number keys 1-8 to enter exclusive mode for each camera
-   - Video should fill more screen space (960x720 instead of 320x240)
-   - Quality should be HIGH - suitable for manual focusing
-   - Text/details in video should be readable
-   
-2. **Verify**: Grid mode performance unchanged
-   - Press 0 to return to grid mode
-   - All 8 cameras show small previews (320x240)
-   - Smooth updates, no lag
-   
-3. **Test**: Still capture works in both modes
-   - Capture in grid mode
-   - Enter exclusive mode, capture there too
-   - Both should produce full-resolution images
+1. **CRITICAL**: Press number key, verify VIDEO enlarges (not just frame)
+2. **CRITICAL**: Verify enlarged video is sharp/clear (high quality)
+3. Verify grid mode still works normally
+4. Test state transitions: grid → exclusive → grid → different exclusive
+5. Verify capture works in both modes
 
 ## DO NOT:
 - Use any other deployment method besides sync_to_slaves.sh
-- Run individual scp commands to cameras
-- Modify sync_to_slaves.sh script
-- Skip testing exclusive mode quality - this is the PRIMARY FIX
-- Proceed without verifying video is sharp in exclusive mode
+- Skip visual verification that VIDEO (not frame) enlarges
+- Proceed without testing multiple cameras in exclusive mode
+- Assume it works without confirming size change
 
-## IF VIDEO STILL BLURRY IN EXCLUSIVE MODE:
-1. Verify commit 9eaceb2 was actually deployed (check git log on Pi)
-2. Check if services restarted properly after sync
-3. Check updatelog.txt for any errors during deployment
-4. Return updatelog.txt to MacBook immediately
-5. Do NOT attempt manual fixes on Pi hardware
+## IF VIDEO STILL DOESN'T ENLARGE:
+This would indicate a different issue. Check:
+1. Verify commit 9044cee is actually deployed (git log on control1)
+2. Check if GUI code was properly copied to control1
+3. Look for Python errors in GUI output related to exclusive_camera
+4. Return updatelog.txt with detailed GUI logs
 
 ## SUCCESS CRITERIA:
 ✅ All 8 cameras show live video preview
-✅ **Exclusive mode video is SHARP and HIGH QUALITY** (can focus manually)
-✅ Grid mode shows normal quality small previews
+✅ **Pressing number keys makes VIDEO visibly enlarge** (fills frame)
+✅ **Enlarged video is SHARP and HIGH QUALITY**
+✅ Pressing 0 makes videos return to small size
+✅ Smooth mode transitions without errors
+✅ Capture works in both modes
 ✅ No errors in updatelog.txt
-✅ Video enlargement is immediately visible when pressing number keys
-✅ Capture button works in both grid and exclusive modes
 
-## TECHNICAL BACKGROUND:
-This fix resolves a quality degradation issue introduced when video resize logic was added.
-The original implementation resized twice:
-1. Network thread: Original → 320x240 (NEAREST - fast but low quality)
-2. GUI thread: 320x240 → 960x720 (LANCZOS - high quality but can't restore lost detail)
+## TECHNICAL SUMMARY:
+This fix completes the exclusive mode video enlargement feature by connecting two pieces:
+1. Resize logic in network_manager.py (from commit 9eaceb2, already deployed)
+2. State tracking in gui_base.py (from commit 9044cee, THIS deployment)
 
-New implementation resizes once:
-- GUI thread: Original → 960x720 or 320x240 (LANCZOS - preserves quality)
-
-Single resize from original = better quality, cleaner code, same performance.
+Together they enable the video stream to know when to resize itself based on which camera
+is currently in exclusive view. Without both pieces, the resize logic exists but never
+activates because it can't detect exclusive mode.
