@@ -299,6 +299,8 @@ class NetworkManager:
                 self.gui.root.after_idle(
                     lambda: self.gui.gallery_panel.add_image(filename, device_name, timestamp)
                 )
+                # Notify GUI that an image was received
+                self.gui.root.after_idle(self.gui.on_image_received)
             
             logging.info(f"Saved image from {device_name}: {filename}")
             

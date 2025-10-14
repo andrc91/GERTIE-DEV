@@ -27,6 +27,10 @@ class MasterVideoGUI:
         self.heartbeat_labels = {}
         self.gallery_thumbs = []
         
+        # Progress tracking
+        self.expected_images = 0
+        self.received_images = 0
+        
         self.setup_window()
         self.setup_styles()
         
@@ -183,21 +187,25 @@ class MasterVideoGUI:
         camera_ips = self.get_camera_ips()
         total = len(camera_ips)
         
+        # Initialize image tracking
+        self.expected_images = total
+        self.received_images = 0
+        
         # Show progress bar
         self.show_progress(total)
         
         for i, ip in enumerate(camera_ips, 1):
-            # Update progress
-            self.update_progress(i, total, f"Capturing camera {i}/{total}...")
+            # Update progress for sending commands
+            self.update_progress(i, total, f"Sending capture command {i}/{total}...")
             
             # Play capture sound and capture
             self.audio.play_capture_sound()
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
         
-        # Show completion and hide after delay
-        self.update_progress(total, total, f"Capture complete! ({total}/{total} cameras)")
-        self.root.after(2000, self.hide_progress)  # Hide after 2 seconds
+        # Update status to waiting for images
+        self.update_progress(total, total, f"Waiting for images... (0/{total} received)")
+        # Don't hide progress bar - wait for images to arrive
 
     def show_progress(self, total):
         """Show progress bar for operations"""
@@ -218,6 +226,23 @@ class MasterVideoGUI:
     def hide_progress(self):
         """Hide progress bar"""
         self.progress_frame.grid_remove()
+
+    def on_image_received(self):
+        """Called when an image is received and added to gallery"""
+        self.received_images += 1
+        
+        # Update progress to show images being received
+        if self.expected_images > 0:
+            percentage = (self.received_images / self.expected_images) * 100
+            self.progress_bar['value'] = percentage
+            self.progress_label.config(text=f"Receiving images... ({self.received_images}/{self.expected_images} received)")
+            self.root.update_idletasks()
+            
+            # Check if all images received
+            if self.received_images >= self.expected_images:
+                self.progress_label.config(text=f"Capture complete! ({self.expected_images}/{self.expected_images} images)")
+                # Hide after showing completion
+                self.root.after(2000, self.hide_progress)
 
     def sync_time_all_devices(self):
         """Sync time on all devices"""
