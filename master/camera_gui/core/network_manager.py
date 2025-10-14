@@ -7,6 +7,7 @@ import threading
 import logging
 import time
 from datetime import datetime
+from PIL import Image, ImageTk
 
 try:
     from config.settings import config
@@ -162,7 +163,6 @@ class NetworkManager:
     def process_video_frame(self, ip, data):
         """Process incoming video frame"""
         try:
-            from PIL import Image, ImageTk
             import io
             
             # Decode image
