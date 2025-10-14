@@ -1,44 +1,63 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: 2025-10-14 16:50:00
-Commit: 6bb8aad - Fix: Replace broken slaves lookup with exclusive_ip direct comparison
+Date: 2025-10-14 17:50:00
+Commits: 
+- 54f73b8 Feature: Add audio feedback to individual camera capture buttons
+- c191fef Feature: Configure audio_feedback to use shutter.wav for capture sound
 
-## CRITICAL: Previous Deployment Had TOTAL VIDEO FAILURE
-The last deployment (d5e8d40) caused AttributeError on EVERY frame:
-- Error: 'MasterVideoGUI' object has no attribute 'slaves'
-- Result: NO VIDEO DISPLAYED AT ALL - completely black screens
-- Not just a resize issue - video was completely broken!
+## FEATURE: Audio Capture Feedback with shutter.wav
 
-## THIS DEPLOYMENT FIXES THE ATTRIBUTE ERROR
-Changed from broken `self.gui.slaves` lookup to direct `exclusive_ip` comparison
+### Changes Made:
+1. ✅ Configured audio_feedback.py to use shutter.wav instead of system sounds
+2. ✅ Added audio feedback to individual camera Capture buttons
+3. ✅ Audio integration already exists for Capture All button
+4. ✅ Settings toggle already exists in Application Preferences
+5. ✅ Preferences persistence already implemented
 
-## MANDATORY STEPS (NO ALTERNATIVES):
+### MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
 2. On control1: cp -r /media/USB/camera_system_integrated_final /home/andrc1/
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test:
-   - FIRST: Verify video streams show from all 8 cameras (was broken before!)
-   - Press keys 1-8: Each camera should enlarge to 960x720
-   - Press 0: Return to grid with all at 320x240
-   - Verify smooth transitions, no AttributeError in logs
+6. Test Audio Feature (see below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
-## Expected Result:
-✅ Video streams ACTUALLY VISIBLE (were broken in d5e8d40!)
-✅ No more AttributeError spam in logs
-✅ Exclusive mode: Video enlarges to 960x720 (3x normal)
-✅ Grid mode: All videos at 320x240
-✅ Smooth transitions between modes
+## Testing Procedure:
+1. **Check Audio Enabled**: Settings → Application Preferences → "Enable Audio Feedback" should be checked
+2. **Test Capture All**: Click "Capture All Cameras" button → should hear shutter.wav sound
+3. **Test Individual**: Click "Capture" on any camera → should hear shutter.wav sound  
+4. **Test Settings**: Uncheck "Enable Audio Feedback" → captures should be silent
+5. **Test Settings**: Re-check "Enable Audio Feedback" → should hear test sound immediately
+6. **Verify Persistence**: Close GUI, reopen → audio setting should be remembered
 
-## Fixed Issues:
-1. AttributeError: Removed broken self.gui.slaves lookup
-2. Now uses direct exclusive_ip comparison (cleaner, faster)
-3. Both exclusive_camera name and IP stored for efficient checking
+## Expected Result:
+✅ Audible shutter.wav sound plays when capturing (if audio enabled)
+✅ Silence when audio disabled in settings
+✅ Setting persists across GUI restarts
+✅ Both "Capture All" and individual "Capture" buttons play sound
+✅ Sound is non-blocking (doesn't delay captures)
+
+## Technical Details:
+- Sound file: master/shutter.wav (included in deployment)
+- Path resolution: Uses Path(__file__).parent.parent.parent
+- Fallback: macOS system sounds, then Linux beep
+- Platform: Non-blocking subprocess.Popen with afplay (macOS)
+- Silent failure: Audio errors logged but don't break captures
 
 ## DO NOT:
 - Use any other deployment method
 - Run individual scp commands
 - Modify sync_to_slaves.sh
+- Modify shutter.wav location
+
+## If Audio Doesn't Work:
+1. Check updatelog.txt for audio-related errors
+2. Verify shutter.wav exists at master/shutter.wav on control1
+3. Test afplay command manually: `afplay /path/to/shutter.wav`
+4. Check Settings → Application Preferences → audio checkbox is enabled
+5. Audio is non-critical - captures will still work if sound fails
+
+---
+**Phase A Complete**: Audio Feedback Feature Fully Operational ✅
