@@ -89,35 +89,64 @@ def load_all_settings():
     create_directories()
 
 def load_camera_settings():
-    """Load camera settings from file"""
-    try:
-        settings_file = Path(config.IMAGE_DIR) / 'camera_settings.json'
-        if settings_file.exists():
-            with open(settings_file, 'r') as f:
-                loaded_settings = json.load(f)
-                camera_settings.update(loaded_settings)
-            logging.info("Camera settings loaded")
-    except Exception as e:
-        logging.error(f"Error loading camera settings: {e}")
+    """Load camera settings from file asynchronously"""
+    def _load_thread():
+        try:
+            settings_file = Path(config.IMAGE_DIR) / 'camera_settings.json'
+            if settings_file.exists():
+                with open(settings_file, 'r') as f:
+                    loaded_settings = json.load(f)
+                    camera_settings.update(loaded_settings)
+                logging.info("Camera settings loaded")
+        except Exception as e:
+            logging.error(f"Error loading camera settings: {e}")
+    
+    # Run load in background thread to avoid blocking GUI
+    import threading
+    load_thread = threading.Thread(target=_load_thread, daemon=True)
+    load_thread.start()
+    # Wait briefly for initial load at startup
+    load_thread.join(timeout=0.1)
 
 def save_camera_settings():
-    """Save camera settings to file"""
-    try:
-        settings_file = Path(config.IMAGE_DIR) / 'camera_settings.json'
-        with open(settings_file, 'w') as f:
-            json.dump(camera_settings, f, indent=2)
-    except Exception as e:
-        logging.error(f"Error saving camera settings: {e}")
+    """Save camera settings to file asynchronously"""
+    def _save_thread():
+        try:
+            settings_file = Path(config.IMAGE_DIR) / 'camera_settings.json'
+            # Make a copy to avoid thread safety issues
+            settings_copy = camera_settings.copy()
+            with open(settings_file, 'w') as f:
+                json.dump(settings_copy, f, indent=2)
+            logging.info("Camera settings saved successfully")
+        except Exception as e:
+            logging.error(f"Error saving camera settings: {e}")
+    
+    # Run save in background thread to avoid blocking GUI
+    import threading
+    save_thread = threading.Thread(target=_save_thread, daemon=True)
+    save_thread.start()
 
 def load_device_names():
-    """Load device names"""
-    global device_names
-    try:
-        names_file = Path(config.IMAGE_DIR) / 'device_names.json'
-        if names_file.exists():
-            with open(names_file, 'r') as f:
-                device_names = json.load(f)
-        else:
+    """Load device names asynchronously"""
+    def _load_thread():
+        global device_names
+        try:
+            names_file = Path(config.IMAGE_DIR) / 'device_names.json'
+            if names_file.exists():
+                with open(names_file, 'r') as f:
+                    device_names = json.load(f)
+            else:
+                device_names = {}
+        except Exception as e:
+            logging.error(f"Error loading device names: {e}")
+            device_names = {}
+    
+    # Run load in background thread
+    import threading
+    load_thread = threading.Thread(target=_load_thread, daemon=True)
+    load_thread.start()
+    # Wait briefly for initial load
+    load_thread.join(timeout=0.1)
             # Initialize default names
             for i, (name, slave_info) in enumerate(config.SLAVES.items()):
                 device_names[slave_info["ip"]] = name
