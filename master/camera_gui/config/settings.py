@@ -80,7 +80,9 @@ class Config:
 # Global instances
 config = Config()
 camera_settings = {}
-device_names = {}
+
+# Initialize device_names with default IP→name mapping from SLAVES config
+device_names = {slave_info['ip']: name for name, slave_info in config.SLAVES.items()}
 
 def load_all_settings():
     """Load all persistent settings"""
