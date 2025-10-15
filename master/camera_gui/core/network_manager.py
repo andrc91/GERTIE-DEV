@@ -41,7 +41,7 @@ class NetworkManager:
         # CRITICAL FIX: Frame rate limiting to prevent GUI saturation
         # Slaves send at 30 fps, but GUI can only handle 1-2 fps smoothly
         self.last_frame_time = {}  # Track when last frame was processed per camera
-        self.frame_interval_grid = 1.0  # Minimum seconds between frames in grid mode (1 fps)
+        self.frame_interval_grid = 3.0  # Minimum seconds between frames in grid mode (0.33 fps)
         self.frame_interval_exclusive = 0.5  # Minimum seconds between frames in exclusive mode (2 fps)
         
         # INSTRUMENTATION: Performance metrics
@@ -274,19 +274,23 @@ class NetworkManager:
             total_received = sum(self.frames_received.values())
             total_queued = sum(self.frames_queued.values())
             total_skipped = sum(self.frames_skipped.values())
+            total_dropped = sum(self.frames_dropped.values())  # Add dropped counter
             
             if total_received > 0:
-                queue_efficiency = (total_skipped / total_received) * 100
-                logging.info(f"[PERF] OVERALL: Received={total_received}, Queued={total_queued}, Skipped={total_skipped} ({queue_efficiency:.1f}% reduction)")
+                drop_rate = (total_dropped / total_received) * 100
+                skip_rate = (total_skipped / total_received) * 100
+                logging.info(f"[PERF] OVERALL: Received={total_received}, Dropped={total_dropped} ({drop_rate:.1f}%), Queued={total_queued}, Skipped={total_skipped} ({skip_rate:.1f}%)")
             
             for ip in sorted(self.frames_received.keys()):
                 received = self.frames_received[ip]
                 queued = self.frames_queued[ip]
                 skipped = self.frames_skipped[ip]
+                dropped = self.frames_dropped.get(ip, 0)  # Add dropped counter
                 
                 if received > 0:
                     fps = received / elapsed
                     skip_rate = (skipped / received) * 100
+                    drop_rate = (dropped / received) * 100  # Calculate drop rate
                     
                     # Get device name for logging
                     device_name = ip.replace(".", "_")
@@ -296,7 +300,7 @@ class NetworkManager:
                         last_octet = int(ip.split(".")[-1])
                         device_name = f"rep{last_octet - 200}"
                     
-                    logging.info(f"[PERF] {device_name:5s} ({ip}): {fps:4.1f} FPS | Recv={received:4d} | Queued={queued:3d} | Skipped={skipped:3d} ({skip_rate:5.1f}%)")
+                    logging.info(f"[PERF] {device_name:5s} ({ip}): {fps:4.1f} FPS | Recv={received:4d} | Dropped={dropped:4d} ({drop_rate:5.1f}%) | Queued={queued:3d} | Skipped={skipped:3d}")
             
             logging.info("=" * 60)
             
