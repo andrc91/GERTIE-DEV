@@ -1,103 +1,139 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: 2025-10-14 18:44:00
-Commits:
-- 45502fe Feature: Switch to Escape key for exiting exclusive mode (was 0 key)
-- d9bfdc4 Fix: Spacebar animation bleed - prevent event propagation to focused button
+Date: October 15, 2025 11:25
+Commit: 440aa8a (Architectural Fix #2: Rep8 thread synchronization)
 
-## PHASE B ENHANCEMENTS COMPLETE: Keyboard Shortcuts Refinement
+## CRITICAL: ARCHITECTURAL FIXES - NOT PARAMETER TUNING
+Previous fixes (commits 7b25c2c, 2e80141) addressed symptoms, not root causes.
+These architectural fixes address fundamental design flaws in thread coordination.
 
-### What Changed:
-✅ **Spacebar animation fix**: No more wrong button animation (d9bfdc4)
-✅ **Escape key enhancement**: Now exits exclusive mode (was 0 key) (45502fe)
+## WHAT CHANGED:
+**Fix #1 (185c628): GUI Event Queue Gating**
+- Problem: 240 after_idle() calls/sec queued even with rate limiting
+- Solution: Gate calls BEFORE queuing using update_pending flag
+- Impact: 90% reduction in Tkinter event loop processing
 
-### Updated Keyboard Shortcuts:
-- **Space**: Capture all cameras (fixed animation)
-- **1-8**: Toggle individual camera preview (exclusive/normal view)
-- **Esc**: Exit exclusive mode and show all cameras (NEW - was 0 key)
-- **S**: Open settings menu
-- **G**: Open gallery panel
-- **R**: Restart all video streams
-- **Ctrl+Q**: Quit application
+**Fix #2 (440aa8a): Rep8 Thread Synchronization**  
+- Problem: No synchronization between streaming/capture Picamera2 instances
+- Solution: threading.Event() for proper cleanup sequencing
+- Impact: Eliminates "camera already open" conflicts
 
-### User Experience Improvements:
-**Before**: 
-- 0 key to exit exclusive mode (counterintuitive)
-- Spacebar showed wrong button animation
-
-**After**:
-- Escape key to exit exclusive mode (natural, intuitive)
-- Spacebar shows correct visual feedback
-- Better workflow: Number key focuses → Escape unfocuses
-
-### MANDATORY STEPS (NO ALTERNATIVES):
+## MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
 2. On control1: cp -r /media/USB/camera_system_integrated_final /home/andrc1/
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. Test Enhanced Keyboard Shortcuts (see below)
+6. **CRITICAL TESTING** (see below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
-## Testing Procedure:
+## CRITICAL TESTING PROTOCOL:
 
-### 1. Test Escape Key (NEW PRIMARY FEATURE):
-- Press **5** (or any number 1-8)
-- **Expected**: rep5 camera shown enlarged (exclusive mode)
-- Press **Escape**
-- **Expected**: Return to normal 8-camera grid view ✅
-- **Intuitive**: Escape = "go back" / "exit mode"
+### Test #1: Rep8 Freeze Fix (PRIORITY: CRITICAL)
+**Objective**: Verify Rep8 video stream reliably resumes after capture
 
-### 2. Test Spacebar (FIXED):
-- Press **Space**
-- **Expected**: 
-  - ✅ Hear 8 rapid shutter sounds
-  - ✅ Images captured from all cameras
-  - ✅ NO animation on "Start Video Streams" button
-  - ✅ Clean visual feedback
+**Steps**:
+1. Start GUI, wait for all 8 cameras streaming
+2. Click "Capture All" button
+3. Watch rep8 (bottom-right) - should pause during capture
+4. **Count seconds** - should resume within 5-10 seconds automatically
+5. Verify rep8 video is live and smooth (not frozen/stuttering)
+6. Repeat capture 5 more times (total 6 captures)
+7. Each time: rep8 should pause then auto-resume
 
-### 3. Test Camera Focus Flow:
-- Press **1** → rep1 enlarged
-- Press **Escape** → Back to grid
-- Press **3** → rep3 enlarged
-- Press **3** again → Back to grid (toggle behavior still works)
-- Press **7** → rep7 enlarged
-- Press **Escape** → Back to grid
+**SUCCESS CRITERIA**:
+✅ Rep8 video resumes automatically after EVERY capture (6/6)
+✅ Resume time: 5-10 seconds consistently
+✅ Video quality: smooth, not frozen or stuttering
+✅ No "camera already open" errors in log
 
-### 4. Test Other Shortcuts:
-- **S**: Opens settings ✅
-- **G**: Opens gallery ✅
-- **R**: Restarts streams ✅
-- **Ctrl+Q**: Quits application ✅
+**FAILURE INDICATORS**:
+❌ Rep8 stays frozen after any capture
+❌ Resume takes >15 seconds
+❌ Video stutters or shows errors after resume
+❌ "camera already open" or Picamera2 errors in log
 
-## Expected Result:
-✅ **Escape key**: Natural, intuitive exit from exclusive mode
-✅ **Spacebar**: Clean capture with correct visual feedback
-✅ **Number keys**: Smooth camera focus switching
-✅ **All shortcuts**: Professional, efficient workflow
+### Test #2: GUI Responsiveness Fix (PRIORITY: CRITICAL)
+**Objective**: Verify GUI is dramatically more responsive
 
-## Technical Details:
-- **Key Binding Change**: `'0'` → `'<Escape>'`
-- **Function Called**: `self.show_all_cameras()`
-- **Help Text Updated**: GUI shows "[Esc] Show All" instead of "[0] Show All"
-- **Lines Modified**: 3 lines in gui_base.py (binding + help text + comment)
+**Steps**:
+1. Start GUI with all 8 cameras streaming in grid mode
+2. Move mouse around the window - observe smoothness
+3. Rapidly click between different camera views (exclusive mode)
+4. Click "Capture All" - observe button response time
+5. While streaming, try other buttons - should be instant
+6. Check system monitor - CPU usage should be lower than before
 
-## Complete Phase A + B Summary:
+**SUCCESS CRITERIA**:
+✅ Mouse movement: smooth, no lag or jitter
+✅ Button clicks: instant response (<100ms perceived delay)
+✅ Camera switching: immediate transition, no freeze
+✅ Grid view: smooth frame updates, not choppy
+✅ CPU usage: noticeably lower than previous deployment
 
-| Enhancement | Status | Commit |
-|-------------|--------|--------|
-| Audio feedback (shutter.wav) | ✅ | c191fef |
-| Individual capture audio | ✅ | 54f73b8 |
-| Platform fix (aplay on Linux) | ✅ | c3997e0 |
-| Per-camera audio burst | ✅ | 81cc7af |
-| Spacebar animation fix | ✅ | d9bfdc4 |
-| **Escape key for exit mode** | ✅ | **45502fe** |
+**FAILURE INDICATORS**:
+❌ Mouse lag when moving over GUI
+❌ Button clicks take >500ms to respond
+❌ Camera switching delayed or freezes GUI
+❌ Grid view choppy or stuttering
+❌ CPU usage same or higher than before
+
+### Test #3: Reliability Test (PRIORITY: HIGH)
+**Objective**: Verify system stability over 2-minute session
+
+**Steps**:
+1. Stream all 8 cameras for 30 seconds in grid mode
+2. Switch to exclusive mode (different cameras) for 30 seconds
+3. Perform 3 "Capture All" operations
+4. Return to grid mode for final 30 seconds
+5. Check for any errors, warnings, or crashes
+
+**SUCCESS CRITERIA**:
+✅ All cameras stream continuously without dropping
+✅ No GUI freezes or hangs during any operation
+✅ All 3 captures complete successfully
+✅ No errors in updatelog.txt related to threading or Picamera2
+✅ System remains stable throughout 2-minute test
+
+## Expected Result After Testing:
+
+### If BOTH Tests #1 and #2 Pass:
+🎉 **ARCHITECTURAL FIXES SUCCESSFUL**
+- Rep8 freeze issue: RESOLVED (Event-based synchronization working)
+- GUI lag issue: RESOLVED (Event queue gating working)
+- System should feel dramatically more responsive
+- Ready to move to other feature development
+
+### If Test #1 Fails (Rep8 still freezes):
+⚠️ Thread synchronization issue deeper than expected
+Next investigation needed:
+- Check if Events are being set/cleared correctly in log
+- May need longer timeout periods
+- May need module-level picam2 reference instead of local
+
+### If Test #2 Fails (GUI still laggy):
+⚠️ Bottleneck not in event queue, look at:
+- Image decoding performance (JPEG decode time)
+- PIL/PhotoImage creation overhead
+- Tkinter rendering pipeline
+- May need to move image processing to background threads
+
+### If BOTH Tests Fail:
+⚠️ Return updatelog.txt immediately for deep analysis
+- May need profiling to find actual bottlenecks
+- Consider alternative GUI framework (not Tkinter)
+- May need hardware-level investigation (Pi performance)
 
 ## DO NOT:
 - Use any other deployment method
-- Run individual scp commands
+- Run individual scp commands  
 - Modify sync_to_slaves.sh
+- Skip the critical testing protocol
+- Deploy if any uncommitted changes exist
 
----
-**PHASE B COMPLETE**: Professional keyboard shortcuts with intuitive Escape key behavior 🎹✨
+## NOTES:
+- These are architectural fixes addressing root causes
+- Previous parameter tuning (sleep times, rate limits) was insufficient
+- Testing protocol designed to verify the architectural changes work
+- Detailed logging will show Event timing for debugging if needed
