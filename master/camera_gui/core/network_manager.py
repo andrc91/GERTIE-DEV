@@ -79,7 +79,7 @@ class NetworkManager:
         try:
             print(f"📡 Sending '{command}' to {ip}")
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(5.0)  # Increased timeout for shutdown commands
+            sock.settimeout(1.0)  # 1s timeout sufficient for local network
             
             # Get correct ports for this device
             ports = self.get_device_ports(ip)
@@ -116,7 +116,7 @@ class NetworkManager:
                     # Send additional shutdown formats
                     for additional_cmd in ["SHUTDOWN", "poweroff"]:
                         sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        sock2.settimeout(3.0)
+                        sock2.settimeout(1.0)
                         sock2.sendto(additional_cmd.encode(), (ip, port))
                         sock2.close()
                         logging.info(f"Sent additional shutdown command '{additional_cmd}' to {ip}:{port}")
