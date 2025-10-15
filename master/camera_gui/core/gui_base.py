@@ -194,6 +194,11 @@ class MasterVideoGUI:
         self.expected_images = total
         self.received_images = 0
         
+        # Store previous states before capturing
+        previous_states = {}
+        for ip in camera_ips:
+            previous_states[ip] = self.camera_states.get(ip, "IDLE")
+        
         # Show progress bar
         self.show_progress(total)
         
@@ -209,11 +214,9 @@ class MasterVideoGUI:
             self.network_manager.send_command(ip, "CAPTURE_STILL")
             time.sleep(0.1)  # Brief delay between captures
             
-            # Return to previous state (STREAMING or IDLE)
-            # Check if camera was streaming before capture
-            if self.camera_states.get(ip) == "CAPTURING":
-                # Default back to IDLE after capture
-                self.root.after(1000, lambda ip=ip: self.update_camera_state(ip, "IDLE"))
+            # Return to previous state after capture
+            prev_state = previous_states[ip]
+            self.root.after(1000, lambda ip=ip, state=prev_state: self.update_camera_state(ip, state))
         
         # Update status to waiting for images
         self.update_progress(total, total, f"Waiting for images... (0/{total} received)")
