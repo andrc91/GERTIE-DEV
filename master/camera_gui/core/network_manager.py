@@ -104,56 +104,62 @@ class NetworkManager:
                 }
 
     def send_command(self, ip, command):
-        """Send command to device using correct ports with enhanced logging"""
-        try:
-            print(f"📡 Sending '{command}' to {ip}")
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(1.0)  # 1s timeout sufficient for local network
-            
-            # Get correct ports for this device
-            ports = self.get_device_ports(ip)
-            
-            # Determine which port to use based on command type
-            if command in ("START_STREAM", "STOP_STREAM", "RESTART_STREAM"):
-                # Video control commands
-                # Local camera slave listens for START/STOP on control port (5011),
-                # not the video_control port. Special-case localhost.
-                if ip in ("127.0.0.1", "localhost"):
+        """Send command to device using correct ports - NON-BLOCKING version"""
+        # Run in background thread to avoid blocking GUI
+        def _send_thread():
+            try:
+                print(f"📡 Sending '{command}' to {ip}")
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.settimeout(1.0)  # 1s timeout sufficient for local network
+                
+                # Get correct ports for this device
+                ports = self.get_device_ports(ip)
+                
+                # Determine which port to use based on command type
+                if command in ("START_STREAM", "STOP_STREAM", "RESTART_STREAM"):
+                    # Video control commands
+                    # Local camera slave listens for START/STOP on control port (5011),
+                    # not the video_control port. Special-case localhost.
+                    if ip in ("127.0.0.1", "localhost"):
+                        port = ports['control']
+                    else:
+                        port = ports.get('video_control', ports['control'])
+                elif command in ("sudo poweroff", "SHUTDOWN", "REBOOT", "poweroff", "shutdown", "reboot"):
+                    # System commands - use control port
+                    port = ports['control']
+                elif command.startswith("SET_TIME"):
+                    # Time sync commands
                     port = ports['control']
                 else:
-                    port = ports.get('video_control', ports['control'])
-            elif command in ("sudo poweroff", "SHUTDOWN", "REBOOT", "poweroff", "shutdown", "reboot"):
-                # System commands - use control port
-                port = ports['control']
-            elif command.startswith("SET_TIME"):
-                # Time sync commands
-                port = ports['control']
-            else:
-                # Default commands
-                port = ports['control']
-            
-            # Send command
-            sock.sendto(command.encode(), (ip, port))
-            sock.close()
-            
-            print(f"   ✅ Sent to {ip}:{port}")
-            logging.info(f"Sent command '{command}' to {ip}:{port}")
-            
-            # Special handling for shutdown - send multiple formats to ensure it works
-            if command == "sudo poweroff":
-                try:
-                    # Send additional shutdown formats
-                    for additional_cmd in ["SHUTDOWN", "poweroff"]:
-                        sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        sock2.settimeout(1.0)
-                        sock2.sendto(additional_cmd.encode(), (ip, port))
-                        sock2.close()
-                        logging.info(f"Sent additional shutdown command '{additional_cmd}' to {ip}:{port}")
-                except Exception as e:
-                    logging.warning(f"Additional shutdown commands failed for {ip}: {e}")
-            
-        except Exception as e:
-            logging.error(f"Failed to send command '{command}' to {ip}: {e}")
+                    # Default commands
+                    port = ports['control']
+                
+                # Send command
+                sock.sendto(command.encode(), (ip, port))
+                sock.close()
+                
+                print(f"   ✅ Sent to {ip}:{port}")
+                logging.info(f"Sent command '{command}' to {ip}:{port}")
+                
+                # Special handling for shutdown - send multiple formats to ensure it works
+                if command == "sudo poweroff":
+                    try:
+                        # Send additional shutdown formats
+                        for additional_cmd in ["SHUTDOWN", "poweroff"]:
+                            sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                            sock2.settimeout(1.0)
+                            sock2.sendto(additional_cmd.encode(), (ip, port))
+                            sock2.close()
+                            logging.info(f"Sent additional shutdown command '{additional_cmd}' to {ip}:{port}")
+                    except Exception as e:
+                        logging.warning(f"Additional shutdown commands failed for {ip}: {e}")
+                
+            except Exception as e:
+                logging.error(f"Failed to send command '{command}' to {ip}: {e}")
+        
+        # Execute in background thread - return immediately to GUI
+        cmd_thread = threading.Thread(target=_send_thread, daemon=True)
+        cmd_thread.start()
 
     def video_receiver(self):
         """Receive video frames with proper port handling"""
