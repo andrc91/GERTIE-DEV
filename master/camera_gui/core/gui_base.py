@@ -299,15 +299,30 @@ class MasterVideoGUI:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             success_count = 0
-            for ip in self.get_camera_ips():
+            
+            # Use threading to avoid blocking GUI with sleep
+            import threading
+            def send_time_command(ip):
+                nonlocal success_count
                 try:
                     self.network_manager.send_command(ip, f"SET_TIME_{current_time}")
                     success_count += 1
-                    time.sleep(0.1)
                 except Exception as e:
                     logging.error(f"Error syncing time to {ip}: {e}")
             
-            messagebox.showinfo("Time Sync", f"Time synchronization sent to {success_count}/{len(self.get_camera_ips())} devices.")
+            # Send commands in parallel with staggered delays (non-blocking)
+            threads = []
+            for i, ip in enumerate(self.get_camera_ips()):
+                # Stagger by 100ms each, but don't block GUI
+                thread = threading.Timer(i * 0.1, send_time_command, args=[ip])
+                thread.start()
+                threads.append(thread)
+            
+            # Show immediate feedback, actual sends happen in background
+            self.root.after(1000, lambda: messagebox.showinfo(
+                "Time Sync", 
+                f"Time synchronization sent to {success_count}/{len(self.get_camera_ips())} devices."
+            ))
 
     def start_all_video_streams(self):
         """Manually start all video streams - user controlled"""
@@ -435,8 +450,8 @@ class MasterVideoGUI:
         """Restart all video streams"""
         logging.info("Restarting all video streams via keyboard shortcut")
         self.stop_all_video_streams()
-        time.sleep(1)
-        self.start_all_video_streams()
+        # Use after() instead of sleep to avoid blocking GUI
+        self.root.after(1000, self.start_all_video_streams)
     
     def open_camera_settings_for_all(self):
         """Open global camera settings dialog"""
