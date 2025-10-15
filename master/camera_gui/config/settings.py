@@ -147,11 +147,6 @@ def load_device_names():
     load_thread.start()
     # Wait briefly for initial load
     load_thread.join(timeout=0.1)
-            # Initialize default names
-            for i, (name, slave_info) in enumerate(config.SLAVES.items()):
-                device_names[slave_info["ip"]] = name
-    except Exception as e:
-        logging.error(f"Error loading device names: {e}")
 
 def save_device_names():
     """Save device names"""
