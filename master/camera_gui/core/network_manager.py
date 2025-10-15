@@ -36,8 +36,6 @@ class NetworkManager:
         self.video_socket = None
         self.still_server = None
         self.active_heartbeats = {}
-        self.frame_counters = {}  # Track frames per camera for adaptive display
-        self.last_update_time = {}  # Track last GUI update time per camera for rate limiting
         self.update_pending = {}  # Track if GUI update already queued per camera (prevents saturation)
         
         # INSTRUMENTATION: Performance metrics
