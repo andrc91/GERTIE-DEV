@@ -38,6 +38,7 @@ class NetworkManager:
         self.active_heartbeats = {}
         self.frame_counters = {}  # Track frames per camera for adaptive display
         self.last_update_time = {}  # Track last GUI update time per camera for rate limiting
+        self.update_pending = {}  # Track if GUI update already queued per camera (prevents saturation)
 
     def start_all_services(self):
         """Start all network services"""
@@ -175,17 +176,21 @@ class NetworkManager:
             # Pass ORIGINAL image to GUI thread - let it decide sizing based on exclusive mode
             # No pre-resize here to preserve quality for exclusive mode enlargement
             
-            # Update GUI thread-safely - pass PIL Image for GUI thread to handle sizing
+            # CRITICAL FIX: Only queue GUI update if one isn't already pending
+            # This prevents Tkinter event queue saturation (240 calls/sec → ~24 calls/sec)
             if ip in self.gui.video_labels:
-                self.gui.root.after_idle(
-                    lambda: self.update_video_display_safe(ip, image)
-                )
+                if not self.update_pending.get(ip, False):
+                    self.update_pending[ip] = True  # Mark update as pending
+                    self.gui.root.after_idle(
+                        lambda: self.update_video_display_safe(ip, image)
+                    )
+                # Else: Skip queuing - update already pending for this camera
                 
         except Exception as e:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
     def update_video_display_safe(self, ip, pil_image):
-        """Thread-safe video display update with time-based rate limiting and adaptive frame rate"""
+        """Thread-safe video display update with gated queuing to prevent event loop saturation"""
         try:
             if ip in self.gui.video_labels:
                 import time
@@ -238,6 +243,9 @@ class NetworkManager:
                 self.gui.video_labels[ip].image = image_tk  # Keep reference
         except Exception as e:
             logging.error(f"Error updating video display for {ip}: {e}")
+        finally:
+            # CRITICAL: Clear pending flag to allow next update to be queued
+            self.update_pending[ip] = False
 
     def still_receiver(self):
         """Receive still images"""
