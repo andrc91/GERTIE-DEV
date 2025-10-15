@@ -21,6 +21,9 @@ class GalleryPanel:
         self.thumbnails_frame = None
         self.thumbnails = []
         
+        # Debounce timer for Canvas scrollregion updates (performance optimization)
+        self.scrollregion_update_timer = None
+        
         self.create_panel()
 
     def create_panel(self):
@@ -53,9 +56,11 @@ class GalleryPanel:
         self.canvas.configure(yscrollcommand=scrollbar.set)
         
         self.thumbnails_frame = ttk.Frame(self.canvas)
+        # PERFORMANCE FIX: Debounce Configure events to prevent rapid bbox("all") calls
+        # This eliminates 50-100ms GUI thread blocking per thumbnail add
         self.thumbnails_frame.bind(
             "<Configure>", 
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            lambda e: self._schedule_scrollregion_update()
         )
         
         self.canvas.create_window((0, 0), window=self.thumbnails_frame, anchor="nw")
@@ -216,3 +221,29 @@ class GalleryPanel:
             self.canvas.yview_scroll(delta, "units")
         except Exception as e:
             logging.error(f"Mouse wheel error: {e}")
+
+    
+    def _schedule_scrollregion_update(self):
+        """Schedule a scrollregion update, canceling any pending update.
+        
+        This debounces rapid Configure events to prevent excessive bbox("all") calls.
+        Multiple rapid thumbnail additions will only trigger one update after 150ms.
+        """
+        # Cancel any pending update
+        if self.scrollregion_update_timer:
+            self.root.after_cancel(self.scrollregion_update_timer)
+        
+        # Schedule new update after 150ms delay
+        self.scrollregion_update_timer = self.root.after(150, self._update_scrollregion)
+    
+    def _update_scrollregion(self):
+        """Actually update the canvas scrollregion (debounced).
+        
+        This method runs 150ms after the last Configure event, batching multiple
+        rapid changes into a single bbox("all") calculation.
+        """
+        try:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            self.scrollregion_update_timer = None
+        except Exception as e:
+            logging.error(f"Error updating scrollregion: {e}")
