@@ -1,22 +1,26 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: October 15, 2025 11:25
-Commit: 440aa8a (Architectural Fix #2: Rep8 thread synchronization)
+Date: October 15, 2025 12:00
+Commit: 80346eb (Instrumentation: Performance metrics)
 
-## CRITICAL: ARCHITECTURAL FIXES - NOT PARAMETER TUNING
-Previous fixes (commits 7b25c2c, 2e80141) addressed symptoms, not root causes.
-These architectural fixes address fundamental design flaws in thread coordination.
+## CRITICAL: INSTRUMENTATION DEPLOYMENT
+Previous architectural fixes could not be debugged due to insufficient logging.
+This deployment adds comprehensive instrumentation to verify fixes are working.
 
 ## WHAT CHANGED:
-**Fix #1 (185c628): GUI Event Queue Gating**
-- Problem: 240 after_idle() calls/sec queued even with rate limiting
-- Solution: Gate calls BEFORE queuing using update_pending flag
-- Impact: 90% reduction in Tkinter event loop processing
+**Instrumentation #1 (d54c015): Rep8 Event Logging**
+- Precise timestamps for all Event operations (SET/CLEAR)
+- Event.wait() timing (before/after with elapsed time)
+- Capture cycle timing (total duration)
+- Success/timeout result logging
+- Prefixes: [EVENT], [EVENT-WAIT], [EVENT-RESULT], [TIMING]
 
-**Fix #2 (440aa8a): Rep8 Thread Synchronization**  
-- Problem: No synchronization between streaming/capture Picamera2 instances
-- Solution: threading.Event() for proper cleanup sequencing
-- Impact: Eliminates "camera already open" conflicts
+**Instrumentation #2 (80346eb): GUI Performance Metrics**  
+- Frame counters: received, queued, skipped per camera
+- Performance logging every 10 seconds
+- Per-camera FPS and skip rate
+- Queue efficiency metrics (% reduction)
+- Prefix: [PERF]
 
 ## MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
@@ -24,116 +28,141 @@ These architectural fixes address fundamental design flaws in thread coordinatio
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. **CRITICAL TESTING** (see below)
+6. **PERFORM INSTRUMENTED TESTING** (see below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
-## CRITICAL TESTING PROTOCOL:
+## INSTRUMENTED TESTING PROTOCOL:
 
-### Test #1: Rep8 Freeze Fix (PRIORITY: CRITICAL)
-**Objective**: Verify Rep8 video stream reliably resumes after capture
+### Phase 1: Baseline (30 seconds)
+**Objective**: Collect baseline performance data
 
-**Steps**:
 1. Start GUI, wait for all 8 cameras streaming
-2. Click "Capture All" button
-3. Watch rep8 (bottom-right) - should pause during capture
-4. **Count seconds** - should resume within 5-10 seconds automatically
-5. Verify rep8 video is live and smooth (not frozen/stuttering)
-6. Repeat capture 5 more times (total 6 captures)
-7. Each time: rep8 should pause then auto-resume
+2. Let run for 30 seconds in grid mode
+3. **Watch for**: [PERF] logs every 10 seconds in terminal
+4. **Expected**: FPS, skip rates, queue efficiency displayed
+5. **Note**: Record approximate FPS and skip % for each camera
 
-**SUCCESS CRITERIA**:
-✅ Rep8 video resumes automatically after EVERY capture (6/6)
-✅ Resume time: 5-10 seconds consistently
-✅ Video quality: smooth, not frozen or stuttering
-✅ No "camera already open" errors in log
+### Phase 2: Rep8 Capture Test (CRITICAL)
+**Objective**: Verify Event synchronization with full visibility
 
-**FAILURE INDICATORS**:
-❌ Rep8 stays frozen after any capture
-❌ Resume takes >15 seconds
-❌ Video stutters or shows errors after resume
-❌ "camera already open" or Picamera2 errors in log
+1. Click "Capture All" button once
+2. **Watch terminal for**:
+   - `[EVENT] stream_stopped_event CLEARED at [time]` (capture function)
+   - `[EVENT-WAIT] Waiting for stream_stopped_event...` (capture waiting)
+   - `[EVENT] stream_stopped_event SET at [time]` (streaming cleanup)
+   - `[EVENT-RESULT] stream_stopped_event RECEIVED in X.XXs - SUCCESS` (or TIMEOUT)
+   - `[TIMING] Capture cycle START at [time]`
+   - `[EVENT] capture_complete_event SET at [time]` (after capture done)
+   - `[EVENT-WAIT] Waiting for capture_complete_event...` (restart waiting)
+   - `[EVENT-RESULT] capture_complete_event RECEIVED in X.XXs - SUCCESS` (or TIMEOUT)
+   - `[TIMING] Capture cycle COMPLETE in X.XXs`
+3. **Watch rep8 video**: Should pause during capture, resume within 5-10 seconds
+4. **Repeat**: Capture 2 more times (total 3 cycles)
 
-### Test #2: GUI Responsiveness Fix (PRIORITY: CRITICAL)
-**Objective**: Verify GUI is dramatically more responsive
+### Phase 3: GUI Responsiveness Observation
+**Objective**: Subjective feel + objective metrics
 
-**Steps**:
-1. Start GUI with all 8 cameras streaming in grid mode
-2. Move mouse around the window - observe smoothness
-3. Rapidly click between different camera views (exclusive mode)
-4. Click "Capture All" - observe button response time
-5. While streaming, try other buttons - should be instant
-6. Check system monitor - CPU usage should be lower than before
+1. Continue streaming all 8 cameras for 30 seconds
+2. Move mouse around GUI
+3. Click buttons (exclusive view changes)
+4. **Watch terminal**: [PERF] logs should show queue efficiency
+5. **Expected**: High skip rates (80-90%) = queue gating working
 
-**SUCCESS CRITERIA**:
-✅ Mouse movement: smooth, no lag or jitter
-✅ Button clicks: instant response (<100ms perceived delay)
-✅ Camera switching: immediate transition, no freeze
-✅ Grid view: smooth frame updates, not choppy
-✅ CPU usage: noticeably lower than previous deployment
+## SUCCESS CRITERIA (WITH DATA):
 
-**FAILURE INDICATORS**:
-❌ Mouse lag when moving over GUI
-❌ Button clicks take >500ms to respond
-❌ Camera switching delayed or freezes GUI
-❌ Grid view choppy or stuttering
-❌ CPU usage same or higher than before
+### Rep8 Event Synchronization:
+✅ All Event logging appears in updatelog.txt  
+✅ No TIMEOUT messages in [EVENT-RESULT] logs  
+✅ Event timing under 1 second for both events  
+✅ Capture cycle completes in 5-10 seconds total  
+✅ Rep8 video resumes automatically after each capture  
+✅ 3/3 capture cycles successful
 
-### Test #3: Reliability Test (PRIORITY: HIGH)
-**Objective**: Verify system stability over 2-minute session
+### GUI Performance Metrics:
+✅ [PERF] logs appear every 10 seconds  
+✅ Skip rate 80-90% (proves queue gating working)  
+✅ FPS approximately 3-4 per camera in grid mode  
+✅ Total queued calls ~24/sec (vs 240/sec without fix)  
+✅ GUI feels responsive (subjective + metrics support)
 
-**Steps**:
-1. Stream all 8 cameras for 30 seconds in grid mode
-2. Switch to exclusive mode (different cameras) for 30 seconds
-3. Perform 3 "Capture All" operations
-4. Return to grid mode for final 30 seconds
-5. Check for any errors, warnings, or crashes
+## FAILURE INDICATORS (WITH DATA):
 
-**SUCCESS CRITERIA**:
-✅ All cameras stream continuously without dropping
-✅ No GUI freezes or hangs during any operation
-✅ All 3 captures complete successfully
-✅ No errors in updatelog.txt related to threading or Picamera2
-✅ System remains stable throughout 2-minute test
+### Rep8 Issues:
+❌ [EVENT-RESULT] shows TIMEOUT instead of SUCCESS  
+❌ Event timing >5 seconds (something blocking)  
+❌ Capture cycle >15 seconds total  
+❌ Rep8 video stays frozen after any capture  
+❌ Missing Event logs entirely (code didn't deploy)
 
-## Expected Result After Testing:
+### GUI Issues:
+❌ Skip rate <50% (queue gating not working)  
+❌ FPS >10 per camera (not rate limiting)  
+❌ Total queued >100/sec (no reduction achieved)  
+❌ No [PERF] logs (instrumentation didn't deploy)  
+❌ GUI still laggy despite good metrics (bottleneck elsewhere)
 
-### If BOTH Tests #1 and #2 Pass:
-🎉 **ARCHITECTURAL FIXES SUCCESSFUL**
-- Rep8 freeze issue: RESOLVED (Event-based synchronization working)
-- GUI lag issue: RESOLVED (Event queue gating working)
-- System should feel dramatically more responsive
-- Ready to move to other feature development
+## ANALYSIS APPROACH:
 
-### If Test #1 Fails (Rep8 still freezes):
-⚠️ Thread synchronization issue deeper than expected
-Next investigation needed:
-- Check if Events are being set/cleared correctly in log
-- May need longer timeout periods
-- May need module-level picam2 reference instead of local
+### If Rep8 Event Logs Show SUCCESS But Still Freezes:
+→ Event synchronization working, problem is elsewhere (Picamera2 issue, threading bug, etc.)  
+→ Need to investigate Picamera2 lifecycle  
+→ May need module-level picam2 reference
 
-### If Test #2 Fails (GUI still laggy):
-⚠️ Bottleneck not in event queue, look at:
-- Image decoding performance (JPEG decode time)
-- PIL/PhotoImage creation overhead
-- Tkinter rendering pipeline
-- May need to move image processing to background threads
+### If Rep8 Event Logs Show TIMEOUT:
+→ Events not being set by cleanup code  
+→ Check for exceptions in streaming thread finally block  
+→ May need longer timeouts or different sync mechanism
 
-### If BOTH Tests Fail:
-⚠️ Return updatelog.txt immediately for deep analysis
-- May need profiling to find actual bottlenecks
-- Consider alternative GUI framework (not Tkinter)
-- May need hardware-level investigation (Pi performance)
+### If GUI Skip Rate <50%:
+→ update_pending flag not working as designed  
+→ Check flag is being set/cleared correctly  
+→ May need to debug flag state
+
+### If GUI Skip Rate 80-90% But Still Laggy:
+→ Queue gating working, bottleneck is elsewhere  
+→ Likely PhotoImage creation or Tkinter rendering  
+→ Need to move image processing to background thread
+
+### If No Instrumentation Logs Appear:
+→ Code didn't deploy or wrong version running  
+→ Check commit hash matches  
+→ Verify sync_to_slaves.sh completed successfully
+
+## CRITICAL LOG COLLECTION:
+
+The updatelog.txt MUST contain:
+1. Deployment confirmation (sync_to_slaves.sh output)
+2. GUI startup logs
+3. [PERF] metrics (multiple cycles)
+4. [EVENT] synchronization traces (all 3 capture cycles)
+5. [EVENT-WAIT] and [EVENT-RESULT] for all waits
+6. [TIMING] for complete capture cycles
+7. Any ERROR or WARNING messages
+
+Without complete logs, cannot perform analysis.
 
 ## DO NOT:
 - Use any other deployment method
 - Run individual scp commands  
 - Modify sync_to_slaves.sh
-- Skip the critical testing protocol
-- Deploy if any uncommitted changes exist
+- Skip logging collection
+- Test for less than 3 capture cycles
+
+## POST-TEST ACTIONS:
+
+After collecting updatelog.txt with full instrumentation:
+1. Return to MacBook
+2. Execute GERTIE Phase 6 (detailed log analysis)
+3. Determine next steps based on hard data:
+   - If Events work + GUI metrics good: Investigate user perception vs reality
+   - If Events timeout: Fix Event synchronization approach
+   - If GUI metrics bad: Fix queue gating implementation
+   - If metrics good but still issues: Investigate deeper bottlenecks
 
 ## NOTES:
-- These are architectural fixes addressing root causes
-- Previous parameter tuning (sleep times, rate limits) was insufficient
-- Testing protocol designed to verify the architectural changes work
-- Detailed logging will show Event timing for debugging if needed
+- Instrumentation adds ~86 lines of logging
+- Performance overhead: Negligible (logging only)
+- Log prefixes enable easy grep filtering for analysis
+- This deployment provides VISIBILITY to debug previous fixes
+- Expected result: Data-driven decisions on next steps
