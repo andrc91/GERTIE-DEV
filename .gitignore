@@ -30,3 +30,14 @@ logs/
 # Test outputs
 test_output/
 captured_images/
+
+# Testing artifacts
+.pytest_cache/
+.hypothesis/
+.benchmarks/
+
+# Session logs
+session_log.txt
+master/camera_master.log
+master/camera_master_gui.log
+master/master_debug.log
