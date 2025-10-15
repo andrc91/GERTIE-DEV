@@ -1,26 +1,7 @@
 # DEPLOYMENT via sync_to_slaves.sh ONLY
 
-Date: October 15, 2025 12:00
-Commit: 80346eb (Instrumentation: Performance metrics)
-
-## CRITICAL: INSTRUMENTATION DEPLOYMENT
-Previous architectural fixes could not be debugged due to insufficient logging.
-This deployment adds comprehensive instrumentation to verify fixes are working.
-
-## WHAT CHANGED:
-**Instrumentation #1 (d54c015): Rep8 Event Logging**
-- Precise timestamps for all Event operations (SET/CLEAR)
-- Event.wait() timing (before/after with elapsed time)
-- Capture cycle timing (total duration)
-- Success/timeout result logging
-- Prefixes: [EVENT], [EVENT-WAIT], [EVENT-RESULT], [TIMING]
-
-**Instrumentation #2 (80346eb): GUI Performance Metrics**  
-- Frame counters: received, queued, skipped per camera
-- Performance logging every 10 seconds
-- Per-camera FPS and skip rate
-- Queue efficiency metrics (% reduction)
-- Prefix: [PERF]
+Date: 2025-10-15 15:15:00
+Commit: e37e3f5 Fix: Aggressive network-side frame dropping to prevent GUI saturation
 
 ## MANDATORY STEPS (NO ALTERNATIVES):
 1. Copy camera_system_integrated_final to USB
@@ -28,141 +9,153 @@ This deployment adds comprehensive instrumentation to verify fixes are working.
 3. cd /home/andrc1/camera_system_integrated_final
 4. ./sync_to_slaves.sh
 5. ./run_gui_with_logging.sh
-6. **PERFORM INSTRUMENTED TESTING** (see below)
+6. Execute CRITICAL TEST PROTOCOL (below)
 7. cp /home/andrc1/Desktop/updatelog.txt /media/USB/
 8. Return updatelog.txt to MacBook
 
-## INSTRUMENTED TESTING PROTOCOL:
+## WHAT WAS FIXED:
 
-### Phase 1: Baseline (30 seconds)
-**Objective**: Collect baseline performance data
+**ROOT CAUSE IDENTIFIED**:
+- Slaves were transmitting at full 30 FPS (8 cameras × 30 = 240 fps total)
+- Network thread received and resized ALL 240 frames/second
+- GUI thread attempted to process ~24 PhotoImage operations/second
+- Tkinter single-threaded event loop COULD NOT handle this load
+- Result: GUI lag, sluggish responsiveness, frame skipping
 
-1. Start GUI, wait for all 8 cameras streaming
-2. Let run for 30 seconds in grid mode
-3. **Watch for**: [PERF] logs every 10 seconds in terminal
-4. **Expected**: FPS, skip rates, queue efficiency displayed
-5. **Note**: Record approximate FPS and skip % for each camera
+**SOLUTION IMPLEMENTED (Commit e37e3f5)**:
+- Added aggressive time-based frame dropping on NETWORK THREAD
+- Drops frames BEFORE decode/resize (saves CPU)
+- Grid mode: Target 1 fps per camera (1000ms interval)
+- Exclusive mode: Target 15 fps (67ms interval)
+- Expected: 8 cameras × 1 fps = 8 GUI operations/second (vs 24/second)
 
-### Phase 2: Rep8 Capture Test (CRITICAL)
-**Objective**: Verify Event synchronization with full visibility
+**TECHNICAL CHANGES**:
+File: master/camera_gui/core/network_manager.py
+- Line 43: Added last_frame_time tracking dictionary
+- Lines 198-210: Time-based frame gating with early drop
+- Logic: if (time_since_last < min_interval): DROP immediately
+- Result: Dramatic reduction in CPU waste and GUI pressure
 
-1. Click "Capture All" button once
-2. **Watch terminal for**:
-   - `[EVENT] stream_stopped_event CLEARED at [time]` (capture function)
-   - `[EVENT-WAIT] Waiting for stream_stopped_event...` (capture waiting)
-   - `[EVENT] stream_stopped_event SET at [time]` (streaming cleanup)
-   - `[EVENT-RESULT] stream_stopped_event RECEIVED in X.XXs - SUCCESS` (or TIMEOUT)
-   - `[TIMING] Capture cycle START at [time]`
-   - `[EVENT] capture_complete_event SET at [time]` (after capture done)
-   - `[EVENT-WAIT] Waiting for capture_complete_event...` (restart waiting)
-   - `[EVENT-RESULT] capture_complete_event RECEIVED in X.XXs - SUCCESS` (or TIMEOUT)
-   - `[TIMING] Capture cycle COMPLETE in X.XXs`
-3. **Watch rep8 video**: Should pause during capture, resume within 5-10 seconds
-4. **Repeat**: Capture 2 more times (total 3 cycles)
+## EXPECTED RESULT:
 
-### Phase 3: GUI Responsiveness Observation
-**Objective**: Subjective feel + objective metrics
+**Grid Mode Performance**:
+- Smooth 1 FPS display per camera (stable, consistent)
+- GUI responds instantly to mouse movement
+- Button clicks register immediately
+- No freezing or stuttering during frame updates
+- Cursor moves smoothly across interface
 
-1. Continue streaming all 8 cameras for 30 seconds
-2. Move mouse around GUI
-3. Click buttons (exclusive view changes)
-4. **Watch terminal**: [PERF] logs should show queue efficiency
-5. **Expected**: High skip rates (80-90%) = queue gating working
+**Exclusive Mode Performance**:
+- Smooth 15 FPS for focused camera
+- Instant mode switching (grid ↔ exclusive)
+- No lag when selecting different cameras
 
-## SUCCESS CRITERIA (WITH DATA):
+**Frame Statistics**:
+- Should see MASSIVELY increased "frames skipped" count (this is GOOD)
+- Skipped frames = wasted processing prevented
+- Lower received frame count = network thread working efficiently
+- Consistent FPS metrics (1.0 fps in grid, ~15 fps exclusive)
 
-### Rep8 Event Synchronization:
-✅ All Event logging appears in updatelog.txt  
-✅ No TIMEOUT messages in [EVENT-RESULT] logs  
-✅ Event timing under 1 second for both events  
-✅ Capture cycle completes in 5-10 seconds total  
-✅ Rep8 video resumes automatically after each capture  
-✅ 3/3 capture cycles successful
+## CRITICAL TEST PROTOCOL:
 
-### GUI Performance Metrics:
-✅ [PERF] logs appear every 10 seconds  
-✅ Skip rate 80-90% (proves queue gating working)  
-✅ FPS approximately 3-4 per camera in grid mode  
-✅ Total queued calls ~24/sec (vs 240/sec without fix)  
-✅ GUI feels responsive (subjective + metrics support)
+### TEST A: Grid Mode Responsiveness (60 seconds)
+1. Launch GUI with all 8 cameras
+2. Let grid stabilize for 10 seconds
+3. Move mouse cursor rapidly around GUI
+4. Click between different cameras 10 times
+5. Observe: Cursor should move smoothly, clicks instant, no GUI freeze
 
-## FAILURE INDICATORS (WITH DATA):
+**SUCCESS CRITERIA**:
+✓ Mouse cursor moves smoothly without stuttering
+✓ Button clicks register within 100ms
+✓ No visible frame freezing
+✓ All 8 feeds updating at stable 1 fps
 
-### Rep8 Issues:
-❌ [EVENT-RESULT] shows TIMEOUT instead of SUCCESS  
-❌ Event timing >5 seconds (something blocking)  
-❌ Capture cycle >15 seconds total  
-❌ Rep8 video stays frozen after any capture  
-❌ Missing Event logs entirely (code didn't deploy)
+### TEST B: Exclusive Mode Performance (30 seconds)
+1. Enter exclusive mode for rep1
+2. Move mouse around, click buttons
+3. Switch to rep2 exclusive, repeat
+4. Switch to rep3 exclusive, repeat
+5. Return to grid mode
 
-### GUI Issues:
-❌ Skip rate <50% (queue gating not working)  
-❌ FPS >10 per camera (not rate limiting)  
-❌ Total queued >100/sec (no reduction achieved)  
-❌ No [PERF] logs (instrumentation didn't deploy)  
-❌ GUI still laggy despite good metrics (bottleneck elsewhere)
+**SUCCESS CRITERIA**:
+✓ Exclusive view shows smooth 15 fps
+✓ Mode switching is instant (<200ms)
+✓ GUI remains responsive throughout
 
-## ANALYSIS APPROACH:
+### TEST C: Still Capture Stress Test (5 captures)
+1. In grid mode, trigger "Capture All" 5 times
+2. Wait 3 seconds between captures
+3. Observe GUI during capture operations
 
-### If Rep8 Event Logs Show SUCCESS But Still Freezes:
-→ Event synchronization working, problem is elsewhere (Picamera2 issue, threading bug, etc.)  
-→ Need to investigate Picamera2 lifecycle  
-→ May need module-level picam2 reference
+**SUCCESS CRITERIA**:
+✓ GUI stays responsive during captures
+✓ Frame updates continue smoothly
+✓ No lag or freeze during disk writes
+✓ All 8 cameras save successfully
 
-### If Rep8 Event Logs Show TIMEOUT:
-→ Events not being set by cleanup code  
-→ Check for exceptions in streaming thread finally block  
-→ May need longer timeouts or different sync mechanism
+### TEST D: Extended Runtime (3 minutes)
+1. Leave GUI running in grid mode for 3 minutes
+2. Periodically move mouse and click buttons
+3. Monitor frame statistics in updatelog.txt
 
-### If GUI Skip Rate <50%:
-→ update_pending flag not working as designed  
-→ Check flag is being set/cleared correctly  
-→ May need to debug flag state
+**SUCCESS CRITERIA**:
+✓ Consistent 1.0 fps per camera throughout
+✓ High frame skip percentage (80-90% is GOOD)
+✓ No performance degradation over time
+✓ GUI remains responsive for full duration
 
-### If GUI Skip Rate 80-90% But Still Laggy:
-→ Queue gating working, bottleneck is elsewhere  
-→ Likely PhotoImage creation or Tkinter rendering  
-→ Need to move image processing to background thread
+## PERFORMANCE METRICS TO VERIFY:
 
-### If No Instrumentation Logs Appear:
-→ Code didn't deploy or wrong version running  
-→ Check commit hash matches  
-→ Verify sync_to_slaves.sh completed successfully
+In updatelog.txt, look for:
+- **Grid FPS**: Should be stable ~1.0 fps per camera
+- **Frames Skipped**: Should be 80-90% (this is GOOD - means dropping works)
+- **Exclusive FPS**: Should be ~15 fps when in exclusive mode
+- **GUI Responsiveness**: No "lag" reports in user testing
 
-## CRITICAL LOG COLLECTION:
+## COMPARISON WITH PREVIOUS DEPLOYMENT:
 
-The updatelog.txt MUST contain:
-1. Deployment confirmation (sync_to_slaves.sh output)
-2. GUI startup logs
-3. [PERF] metrics (multiple cycles)
-4. [EVENT] synchronization traces (all 3 capture cycles)
-5. [EVENT-WAIT] and [EVENT-RESULT] for all waits
-6. [TIMING] for complete capture cycles
-7. Any ERROR or WARNING messages
+**Previous Results (Commit 01cdd66)**:
+- Grid FPS: 1.9-3.3 fps (unstable)
+- Frames skipped: 2.3% overall (TOO LOW - not dropping enough)
+- User report: "still lag across all tests"
+- Problem: GUI saturated with too many operations
 
-Without complete logs, cannot perform analysis.
+**Expected with This Fix (Commit e37e3f5)**:
+- Grid FPS: 1.0 fps (stable, controlled)
+- Frames skipped: 80-90% (GOOD - aggressive dropping working)
+- User report: Should be smooth, responsive
+- Solution: GUI receives only necessary frames
+
+## WHY THIS SHOULD WORK:
+
+**Before**: 240 fps received → 240 resizes → ~24 GUI updates → LAG
+**After**: 240 fps received → 8 kept (232 dropped early) → 8 resizes → 8 GUI updates → SMOOTH
+
+The key insight: We don't need 30 fps previews. 1 fps is PLENTY for monitoring 8 cameras. By dropping aggressively at the network thread (before any processing), we:
+1. Save massive CPU cycles (no decode/resize for dropped frames)
+2. Reduce GUI thread pressure from 24 ops/sec to 8 ops/sec
+3. Keep event loop responsive for user input
+4. Maintain stable, predictable frame rates
 
 ## DO NOT:
 - Use any other deployment method
-- Run individual scp commands  
+- Run individual scp commands
 - Modify sync_to_slaves.sh
-- Skip logging collection
-- Test for less than 3 capture cycles
+- Expect smooth 30 fps previews (not the goal)
+- Worry about high frame skip percentage (that's the fix working)
 
-## POST-TEST ACTIONS:
+## IF TESTING FAILS:
 
-After collecting updatelog.txt with full instrumentation:
-1. Return to MacBook
-2. Execute GERTIE Phase 6 (detailed log analysis)
-3. Determine next steps based on hard data:
-   - If Events work + GUI metrics good: Investigate user perception vs reality
-   - If Events timeout: Fix Event synchronization approach
-   - If GUI metrics bad: Fix queue gating implementation
-   - If metrics good but still issues: Investigate deeper bottlenecks
+If lag persists after this deployment:
+1. Verify frame skip percentage is 80-90% (proves dropping is working)
+2. Check GUI thread is receiving only ~8 frames/second
+3. If still lagging, bottleneck is PhotoImage.put() itself
+4. Next step would be: Switch from Tkinter to PyQt/OpenGL for rendering
+5. Copy updatelog.txt and report specific symptoms
 
-## NOTES:
-- Instrumentation adds ~86 lines of logging
-- Performance overhead: Negligible (logging only)
-- Log prefixes enable easy grep filtering for analysis
-- This deployment provides VISIBILITY to debug previous fixes
-- Expected result: Data-driven decisions on next steps
+---
+**DEPLOYMENT PACKAGE**: camera_system_integrated_final
+**DEPLOYMENT METHOD**: sync_to_slaves.sh (MANDATORY)
+**CRITICAL FIX**: Network-side frame dropping prevents GUI saturation
+**EXPECTED OUTCOME**: Smooth, responsive GUI with stable 1 fps grid display

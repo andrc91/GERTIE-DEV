@@ -58,6 +58,13 @@ class NetworkManager:
         self.frames_dropped = {}  # Frames dropped by rate limiting
         self.perf_start_time = time.time()
         self.last_perf_log = time.time()
+        
+        # GUI HEARTBEAT MONITOR: Detect event loop stalls
+        self.heartbeat_interval = 200  # Check every 200ms
+        self.heartbeat_count = 0
+        self.last_heartbeat = time.time()
+        self.heartbeat_stalls = 0
+        self._start_heartbeat_monitor()
 
     def start_all_services(self):
         """Start all network services"""
@@ -255,20 +262,25 @@ class NetworkManager:
             if ip in self.latest_frames:
                 pil_image = self.latest_frames[ip]
                 
-                # Reuse PhotoImage if possible, otherwise create new one
-                if ip not in self.photo_images:
-                    self.photo_images[ip] = ImageTk.PhotoImage(pil_image)
-                else:
-                    # Try to update existing PhotoImage (more efficient)
-                    try:
-                        self.photo_images[ip].paste(pil_image)
-                    except:
-                        # Fall back to creating new one if paste fails
+                # OPTIMIZED: Better PhotoImage reuse to reduce object churn
+                try:
+                    if ip not in self.photo_images:
+                        # First time - create PhotoImage with the image
                         self.photo_images[ip] = ImageTk.PhotoImage(pil_image)
+                    else:
+                        # Reuse existing PhotoImage - paste is more efficient
+                        # This avoids creating new objects in the GUI thread
+                        self.photo_images[ip].paste(pil_image)
+                except Exception as e:
+                    # If paste fails (size mismatch), recreate PhotoImage
+                    logging.debug(f"PhotoImage paste failed for {ip}, recreating: {e}")
+                    self.photo_images[ip] = ImageTk.PhotoImage(pil_image)
                 
-                # Update the label widget
-                self.gui.video_labels[ip].config(image=self.photo_images[ip], text="")
-                self.gui.video_labels[ip].image = self.photo_images[ip]  # Keep reference
+                # Update the label widget - minimal operations
+                label = self.gui.video_labels.get(ip)
+                if label:
+                    label.config(image=self.photo_images[ip], text="")
+                    label.image = self.photo_images[ip]  # Keep reference
                 
                 # Clear the buffer
                 del self.latest_frames[ip]
@@ -441,13 +453,14 @@ class NetworkManager:
             with open(filename, "wb") as f:
                 f.write(data)
             
-            # Add to gallery
+            # Add to gallery using scheduled timer to avoid blocking
             if self.gui.gallery_panel:
-                self.gui.root.after_idle(
+                # Use after() with 0 delay instead of after_idle() for better responsiveness
+                self.gui.root.after(0,
                     lambda: self.gui.gallery_panel.add_image(filename, device_name, timestamp)
                 )
-                # Notify GUI that an image was received
-                self.gui.root.after_idle(self.gui.on_image_received)
+                # Notify GUI that an image was received with minimal delay
+                self.gui.root.after(10, self.gui.on_image_received)
             
             logging.info(f"Saved image from {device_name}: {filename}")
             
@@ -507,6 +520,37 @@ class NetworkManager:
                 self.gui.heartbeat_labels[ip].config(text=text, foreground=color)
         except Exception as e:
             logging.error(f"Error updating heartbeat for {ip}: {e}")
+    
+    def _start_heartbeat_monitor(self):
+        """Start GUI heartbeat monitor to detect event loop stalls"""
+        def heartbeat_tick():
+            try:
+                current_time = time.time()
+                elapsed = current_time - self.last_heartbeat
+                
+                # Detect stall if heartbeat delayed > 300ms (expected 200ms)
+                if elapsed > 0.3:
+                    self.heartbeat_stalls += 1
+                    logging.warning(f"GUI heartbeat stall detected: {elapsed:.3f}s delay (stalls: {self.heartbeat_stalls})")
+                
+                self.heartbeat_count += 1
+                self.last_heartbeat = current_time
+                
+                # Log heartbeat health every 30 seconds
+                if self.heartbeat_count % 150 == 0:
+                    logging.info(f"GUI heartbeat: {self.heartbeat_count} ticks, {self.heartbeat_stalls} stalls")
+                
+                # Schedule next heartbeat
+                self.gui.root.after(self.heartbeat_interval, heartbeat_tick)
+                
+            except Exception as e:
+                logging.error(f"Heartbeat monitor error: {e}")
+                # Restart heartbeat even on error
+                self.gui.root.after(self.heartbeat_interval, heartbeat_tick)
+        
+        # Start the heartbeat
+        self.gui.root.after(self.heartbeat_interval, heartbeat_tick)
+        logging.info("GUI heartbeat monitor started")
 
     def debug_video_streaming(self):
         """Debug function to check video streaming status"""

@@ -115,7 +115,7 @@ class GalleryPanel:
                 old_thumb.destroy()
             
             # Update scroll and auto-scroll to bottom
-            self.thumbnails_frame.update_idletasks()
+            # Removed update_idletasks - let GUI update naturally
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             self.canvas.yview_moveto(1.0)
             

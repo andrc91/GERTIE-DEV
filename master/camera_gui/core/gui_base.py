@@ -37,6 +37,11 @@ class MasterVideoGUI:
         self.setup_window()
         self.setup_styles()
         
+        # MOUSE INTERACTION TRACKING for improved responsiveness
+        self.mouse_dragging = False
+        self.interaction_paused = False
+        self._setup_interaction_tracking()
+        
         # Initialize managers
         self.network_manager = NetworkManager(self)
         self.camera_manager = CameraFrameManager(self)
@@ -205,11 +210,11 @@ class MasterVideoGUI:
         # Send all capture commands in parallel using threading
         def send_capture_command(ip, index):
             """Send capture command to single camera"""
-            # Update state to CAPTURING
-            self.root.after_idle(lambda: self.update_camera_state(ip, "CAPTURING"))
+            # Update state to CAPTURING - direct call since we're in thread
+            self.update_camera_state(ip, "CAPTURING")
             
-            # Update progress
-            self.root.after_idle(lambda: self.update_progress(index, total, f"Capturing {index}/{total}..."))
+            # Update progress - direct call for immediate feedback
+            self.update_progress(index, total, f"Capturing {index}/{total}...")
             
             # Play capture sound and capture
             self.audio.play_capture_sound()
@@ -236,7 +241,7 @@ class MasterVideoGUI:
                                 sticky="ew", padx=10, pady=5)
         self.progress_bar['value'] = 0
         self.progress_label.config(text="Starting capture...")
-        self.root.update_idletasks()
+        # Removed update_idletasks - let GUI update naturally
 
     def update_progress(self, current, total, message):
         """Update progress bar and label"""
@@ -244,7 +249,7 @@ class MasterVideoGUI:
             percentage = (current / total) * 100
             self.progress_bar['value'] = percentage
         self.progress_label.config(text=message)
-        self.root.update_idletasks()  # Force UI update
+        # Removed update_idletasks - let GUI update naturally
 
     def hide_progress(self):
         """Hide progress bar"""
@@ -259,7 +264,7 @@ class MasterVideoGUI:
             percentage = (self.received_images / self.expected_images) * 100
             self.progress_bar['value'] = percentage
             self.progress_label.config(text=f"Receiving images... ({self.received_images}/{self.expected_images} received)")
-            self.root.update_idletasks()
+            # Removed update_idletasks - let GUI update naturally
             
             # Check if all images received
             if self.received_images >= self.expected_images:
@@ -378,6 +383,10 @@ class MasterVideoGUI:
             # Enter exclusive mode for this camera
             logging.info(f"Entering exclusive view for {camera_name}")
             
+            # CRITICAL: Stop all timers before mode change to prevent stale updates
+            if hasattr(self, 'network_manager') and self.network_manager:
+                self.network_manager.stop_all_timers()
+            
             # Set exclusive camera state for video resize logic
             self.exclusive_camera = camera_name
             self.exclusive_ip = config.SLAVES[camera_name]['ip']
@@ -474,3 +483,43 @@ class MasterVideoGUI:
             logging.info(f"Saved preferences: {prefs}")
         except Exception as e:
             logging.error(f"Failed to save app preferences: {e}")
+
+    def _setup_interaction_tracking(self):
+        """Setup mouse interaction tracking to pause heavy operations during user interaction"""
+        def on_mouse_press(event):
+            """Pause heavy updates during mouse interaction"""
+            if not self.mouse_dragging:
+                self.mouse_dragging = True
+                self.interaction_paused = True
+                # Notify network manager to pause video updates temporarily
+                if hasattr(self, 'network_manager'):
+                    # Increase timer intervals during interaction
+                    self.network_manager.grid_update_interval = 500  # Slower updates
+                    self.network_manager.exclusive_update_interval = 100
+                logging.debug("Mouse interaction started - pausing heavy updates")
+        
+        def on_mouse_release(event):
+            """Resume normal operations after interaction"""
+            if self.mouse_dragging:
+                self.mouse_dragging = False
+                # Resume after short delay to ensure interaction is complete
+                self.root.after(100, resume_normal_updates)
+        
+        def resume_normal_updates():
+            """Resume normal update rates"""
+            self.interaction_paused = False
+            if hasattr(self, 'network_manager'):
+                # Restore normal timer intervals
+                self.network_manager.grid_update_interval = 250  # Normal 4 Hz
+                self.network_manager.exclusive_update_interval = 67  # Normal 15 Hz
+            logging.debug("Mouse interaction ended - resuming normal updates")
+        
+        # Bind mouse events to root window
+        self.root.bind("<ButtonPress-1>", on_mouse_press)
+        self.root.bind("<ButtonRelease-1>", on_mouse_release)
+        self.root.bind("<B1-Motion>", lambda e: None)  # Track drag motion if needed
+        
+        # Also track scrollwheel interactions
+        self.root.bind("<MouseWheel>", lambda e: on_mouse_press(e))
+        self.root.bind("<Button-4>", lambda e: on_mouse_press(e))  # Linux scroll up
+        self.root.bind("<Button-5>", lambda e: on_mouse_press(e))  # Linux scroll down
