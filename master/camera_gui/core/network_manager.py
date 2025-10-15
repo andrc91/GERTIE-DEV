@@ -187,8 +187,20 @@ class NetworkManager:
             # Remote cameras send RGB data as JPEG 
             # No color swap needed - JPEG decoding handles this correctly
             
-            # Pass ORIGINAL image to GUI thread - let it decide sizing based on exclusive mode
-            # No pre-resize here to preserve quality for exclusive mode enlargement
+            # PERFORMANCE FIX: Resize in network thread BEFORE queuing to GUI
+            # This prevents blocking the GUI event loop with CPU-intensive resize operations
+            
+            # Check if this camera is in exclusive view mode
+            is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                           self.gui.exclusive_ip == ip)
+            
+            # Pre-resize based on display mode to offload work from GUI thread
+            if is_exclusive:
+                # Exclusive mode: Larger preview (960x720) for manual focusing
+                display_image = image.resize((960, 720), Image.Resampling.BILINEAR)
+            else:
+                # Grid mode: Standard preview size (320x240)
+                display_image = image.resize((320, 240), Image.Resampling.BILINEAR)
             
             # CRITICAL FIX: Only queue GUI update if one isn't already pending
             # This prevents Tkinter event queue saturation (240 calls/sec → ~24 calls/sec)
@@ -197,7 +209,7 @@ class NetworkManager:
                     self.update_pending[ip] = True  # Mark update as pending
                     self.frames_queued[ip] += 1  # INSTRUMENTATION: Track queued frame
                     self.gui.root.after_idle(
-                        lambda: self.update_video_display_safe(ip, image)
+                        lambda: self.update_video_display_safe(ip, display_image)
                     )
                 else:
                     # INSTRUMENTATION: Track skipped frame (update already pending)
@@ -207,55 +219,14 @@ class NetworkManager:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
     def update_video_display_safe(self, ip, pil_image):
-        """Thread-safe video display update with gated queuing to prevent event loop saturation"""
+        """Thread-safe video display update - receives pre-resized images from network thread"""
         try:
             if ip in self.gui.video_labels:
-                import time
-                
-                # Initialize frame counter and last update time for this camera
-                if ip not in self.frame_counters:
-                    self.frame_counters[ip] = 0
-                if ip not in self.last_update_time:
-                    self.last_update_time[ip] = 0
-                
-                self.frame_counters[ip] += 1
-                
-                # Check if this camera is in exclusive view mode
-                is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
-                               self.gui.exclusive_ip == ip)
-                
-                # Time-based rate limiting: Only update if enough time has passed
+                # Performance logging only
                 current_time = time.time()
-                if is_exclusive:
-                    # Exclusive mode: Update at most every 67ms (~15 FPS)
-                    min_update_interval = 0.067
-                else:
-                    # Grid mode: Update at most every 333ms (~3 FPS for smoother GUI)
-                    min_update_interval = 0.333
                 
-                time_since_last_update = current_time - self.last_update_time[ip]
-                if time_since_last_update < min_update_interval:
-                    return  # Too soon, skip this update to prevent GUI saturation
-                
-                # Adaptive frame rate: Additional frame dropping based on mode
-                if is_exclusive:
-                    # Exclusive mode: Show every 2nd frame (~15 FPS from 30 FPS source)
-                    if self.frame_counters[ip] % 2 != 0:
-                        return  # Drop frame
-                    # Enlarge for manual focusing with BILINEAR (faster than LANCZOS)
-                    display_image = pil_image.resize((960, 720), Image.Resampling.BILINEAR)
-                else:
-                    # Grid mode: Show every 10th frame (~3 FPS from 30 FPS source)
-                    if self.frame_counters[ip] % 10 != 0:
-                        return  # Drop frame
-                    # Normal grid size with BILINEAR (faster than LANCZOS)
-                    display_image = pil_image.resize((320, 240), Image.Resampling.BILINEAR)
-                
-                # Update timestamp BEFORE GUI update to prevent overlapping updates
-                self.last_update_time[ip] = current_time
-                
-                # Convert to PhotoImage and update label
-                image_tk = ImageTk.PhotoImage(display_image)
+                # Convert pre-resized image directly to PhotoImage (no blocking resize in GUI)
+                image_tk = ImageTk.PhotoImage(pil_image)
                 self.gui.video_labels[ip].config(image=image_tk, text="")
                 self.gui.video_labels[ip].image = image_tk  # Keep reference
                 
