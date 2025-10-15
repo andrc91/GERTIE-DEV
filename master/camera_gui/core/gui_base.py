@@ -202,12 +202,14 @@ class MasterVideoGUI:
         # Show progress bar
         self.show_progress(total)
         
-        for i, ip in enumerate(camera_ips, 1):
+        # Send all capture commands in parallel using threading
+        def send_capture_command(ip, index):
+            """Send capture command to single camera"""
             # Update state to CAPTURING
-            self.update_camera_state(ip, "CAPTURING")
+            self.root.after_idle(lambda: self.update_camera_state(ip, "CAPTURING"))
             
-            # Update progress for sending commands
-            self.update_progress(i, total, f"Sending capture command {i}/{total}...")
+            # Update progress
+            self.root.after_idle(lambda: self.update_progress(index, total, f"Capturing {index}/{total}..."))
             
             # Play capture sound and capture
             self.audio.play_capture_sound()
@@ -215,9 +217,16 @@ class MasterVideoGUI:
             
             # Return to previous state after capture
             prev_state = previous_states[ip]
-            self.root.after(1000, lambda ip=ip, state=prev_state: self.update_camera_state(ip, state))
+            self.root.after(1000, lambda: self.update_camera_state(ip, prev_state))
         
-        # Update status to waiting for images
+        # Launch all capture commands in parallel threads
+        threads = []
+        for i, ip in enumerate(camera_ips, 1):
+            thread = threading.Thread(target=send_capture_command, args=(ip, i), daemon=True)
+            thread.start()
+            threads.append(thread)
+        
+        # Update status to waiting for images (commands sent in parallel)
         self.update_progress(total, total, f"Waiting for images... (0/{total} received)")
         # Don't hide progress bar - wait for images to arrive
 
