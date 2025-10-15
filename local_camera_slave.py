@@ -80,6 +80,11 @@ last_heartbeat = 0
 HEARTBEAT_INTERVAL = 1.0
 HEARTBEAT_TIMEOUT = 5.0
 
+# ARCHITECTURAL FIX: Thread synchronization for Picamera2 instance management
+# Prevents "camera is already open" errors by ensuring proper cleanup sequencing
+stream_stopped_event = threading.Event()  # Signals streaming thread has fully stopped & closed picam2
+capture_complete_event = threading.Event()  # Signals capture is done & picam2 closed, safe to restart stream
+
 # Camera settings (matching working version)
 camera_settings = {
     'brightness': 0,        # FIXED: Match GUI default (-50 to +50, 0 = neutral)
@@ -220,6 +225,9 @@ def start_local_video_stream():
             logging.warning("Local video stream already running")
             return
         streaming = True
+    
+    # ARCHITECTURAL FIX: Clear stop event at stream start (will be set on cleanup)
+    stream_stopped_event.clear()
 
     logging.info(f"🚀 Starting LOCAL video stream to {MASTER_IP}:{VIDEO_PORT}")
 
@@ -336,7 +344,7 @@ def start_local_video_stream():
             try:
                 picam2.stop()
                 picam2.close()
-                logging.info("✓ Local camera stopped")
+                logging.info("✓ Local camera stopped and closed")
             except Exception as e:
                 logging.error(f"Error stopping camera: {e}")
 
@@ -349,6 +357,11 @@ def start_local_video_stream():
 
         with streaming_lock:
             streaming = False
+        
+        # ARCHITECTURAL FIX: Signal that Picamera2 cleanup is complete
+        # This allows capture_local_still() to safely create new Picamera2 instance
+        stream_stopped_event.set()
+        logging.info("✓ Stream cleanup complete - Picamera2 closed and event signaled")
             
         logging.info("🛑 Local video stream stopped")
 
@@ -364,10 +377,10 @@ def stop_local_video_stream():
     logging.info("[LOCAL] ✅ Local video stream stopped")
 
 def capture_local_still():
-    """PROPER PROTOCOL: Capture and send local still image with proper video stream handling"""
+    """ARCHITECTURAL FIX: Proper thread synchronization for Picamera2 instance management"""
     global streaming
     
-    logging.info("[LOCAL] Starting proper still capture protocol...")
+    logging.info("[LOCAL] Starting proper still capture protocol with thread synchronization...")
     
     was_streaming = False
     
@@ -377,16 +390,29 @@ def capture_local_still():
         if streaming:
             logging.info("[LOCAL] Step 1: Stopping video stream for dedicated still capture...")
             streaming = False
+            # Clear the event before waiting - will be set by streaming thread cleanup
+            stream_stopped_event.clear()
     
     if was_streaming:
-        time.sleep(5.0)  # FIXED: Increased from 3.0 to 5.0 to ensure Picamera2 cleanup completes
-        logging.info("[LOCAL] Video stream stopped - camera freed for high-res capture")
+        # ARCHITECTURAL FIX: Wait for Event instead of blind sleep
+        # This ensures streaming thread has ACTUALLY stopped and closed Picamera2
+        logging.info("[LOCAL] Waiting for streaming thread to complete Picamera2 cleanup...")
+        event_received = stream_stopped_event.wait(timeout=10.0)  # 10s max wait
+        
+        if event_received:
+            logging.info("[LOCAL] ✓ Stream cleanup confirmed via Event - camera freed for high-res capture")
+        else:
+            logging.warning("[LOCAL] ⚠️ Timeout waiting for stream cleanup - proceeding anyway")
+            time.sleep(2.0)  # Fallback safety delay
 
     try:
-        # Step 2: Capture dedicated high-resolution still
+        # Step 2: Clear capture complete event before starting capture
+        capture_complete_event.clear()
+        
+        # Step 3: Capture dedicated high-resolution still
         filename = capture_local_image_high_resolution()
         if filename:
-            # Step 3: Upload to master
+            # Step 4: Upload to master
             success = send_local_image(filename)
             if success:
                 logging.info("[LOCAL] Still capture protocol completed successfully")
@@ -401,14 +427,26 @@ def capture_local_still():
         logging.error(f"[LOCAL] Error during still capture protocol: {e}")
         result = False
 
-    # Step 4: Restart video stream if it was running before
+    # Step 5: Restart video stream if it was running before
     if was_streaming:
-        logging.info("[LOCAL] Step 4: Restarting video stream after still capture...")
-        time.sleep(1.0)
+        logging.info("[LOCAL] Step 5: Preparing to restart video stream...")
+        
+        # ARCHITECTURAL FIX: Wait for capture Picamera2 to be fully closed
+        # This ensures no instance conflict when new streaming thread creates Picamera2
+        logging.info("[LOCAL] Waiting for capture Picamera2 cleanup...")
+        event_received = capture_complete_event.wait(timeout=5.0)  # 5s max wait
+        
+        if event_received:
+            logging.info("[LOCAL] ✓ Capture cleanup confirmed via Event - safe to restart stream")
+        else:
+            logging.warning("[LOCAL] ⚠️ Timeout waiting for capture cleanup - proceeding with caution")
+            time.sleep(1.0)  # Extra safety delay
+        
+        logging.info("[LOCAL] Starting new streaming thread...")
         with streaming_lock:
             streaming = True
         threading.Thread(target=start_local_video_stream, daemon=True).start()
-        logging.info("[LOCAL] Video stream restarted - protocol complete")
+        logging.info("[LOCAL] ✓ Video stream restarted - protocol complete with proper synchronization")
     
     return result
 
@@ -462,6 +500,11 @@ def capture_local_image_high_resolution():
         picam2.stop()
         picam2.close()
         
+        # ARCHITECTURAL FIX: Signal that capture Picamera2 is closed
+        # This allows streaming to safely restart without instance conflict
+        capture_complete_event.set()
+        logging.info("[LOCAL] ✓ Capture Picamera2 closed - signaled completion")
+        
         if success and os.path.exists(filename):
             file_size = os.path.getsize(filename)
             logging.info(f"[LOCAL] ✅ HIGH-RES CAPTURED: {filename} ({file_size} bytes, resolution: 4608x2592)")
@@ -484,8 +527,12 @@ def capture_local_image_high_resolution():
             if 'picam2' in locals():
                 picam2.stop()
                 picam2.close()
+                # ARCHITECTURAL FIX: Signal completion even on error
+                capture_complete_event.set()
+                logging.info("[LOCAL] ✓ Error cleanup complete - signaled completion")
         except:
-            pass
+            # If even cleanup fails, still signal to prevent deadlock
+            capture_complete_event.set()
         return None
 
 def send_local_image(filename):
