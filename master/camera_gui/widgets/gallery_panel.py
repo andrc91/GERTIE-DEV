@@ -115,12 +115,27 @@ class GalleryPanel:
                 old_thumb.destroy()
             
             # Update scroll and auto-scroll to bottom
-            # Removed update_idletasks - let GUI update naturally
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            self.canvas.yview_moveto(1.0)
+            # OPTIMIZED: Batch scroll updates instead of immediate recalculation
+            if not hasattr(self, '_scroll_update_pending'):
+                self._scroll_update_pending = False
+            
+            if not self._scroll_update_pending:
+                self._scroll_update_pending = True
+                # Update scrollregion after 100ms delay to batch multiple adds
+                self.root.after(100, self._update_scroll_region)
             
         except Exception as e:
             logging.error(f"Error adding image to gallery: {e}")
+
+    def _update_scroll_region(self):
+        """Batch update scrollregion and auto-scroll - reduces GUI thread blocking"""
+        try:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            self.canvas.yview_moveto(1.0)
+            self._scroll_update_pending = False
+        except Exception as e:
+            logging.error(f"Error updating scroll region: {e}")
+            self._scroll_update_pending = False
 
     def view_image(self, filepath):
         """View full-size image"""

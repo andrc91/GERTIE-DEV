@@ -455,17 +455,50 @@ class NetworkManager:
             
             # Add to gallery using scheduled timer to avoid blocking
             if self.gui.gallery_panel:
-                # Use after() with 0 delay instead of after_idle() for better responsiveness
-                self.gui.root.after(0,
-                    lambda: self.gui.gallery_panel.add_image(filename, device_name, timestamp)
-                )
-                # Notify GUI that an image was received with minimal delay
+                # OPTIMIZED: Batch gallery updates to prevent event queue saturation
+                if not hasattr(self, '_gallery_update_queue'):
+                    self._gallery_update_queue = []
+                    self._gallery_update_pending = False
+                
+                # Queue the update
+                self._gallery_update_queue.append((filename, device_name, timestamp))
+                
+                # Schedule batch update if not already pending
+                if not self._gallery_update_pending:
+                    self._gallery_update_pending = True
+                    # Process gallery updates in batches every 250ms
+                    self.gui.root.after(250, self._process_gallery_batch)
+                
+                # Notify GUI with minimal delay
                 self.gui.root.after(10, self.gui.on_image_received)
             
             logging.info(f"Saved image from {device_name}: {filename}")
             
         except Exception as e:
             logging.error(f"Error saving still image: {e}")
+
+    def _process_gallery_batch(self):
+        """Process batched gallery updates to prevent event queue saturation"""
+        try:
+            if hasattr(self, '_gallery_update_queue') and self._gallery_update_queue:
+                # Process up to 3 images per batch to prevent blocking
+                batch_size = min(3, len(self._gallery_update_queue))
+                for _ in range(batch_size):
+                    if self._gallery_update_queue:
+                        filename, device_name, timestamp = self._gallery_update_queue.pop(0)
+                        if self.gui.gallery_panel:
+                            self.gui.gallery_panel.add_image(filename, device_name, timestamp)
+                
+                # If more items remain, schedule next batch
+                if self._gallery_update_queue:
+                    self.gui.root.after(250, self._process_gallery_batch)
+                else:
+                    self._gallery_update_pending = False
+            else:
+                self._gallery_update_pending = False
+        except Exception as e:
+            logging.error(f"Error processing gallery batch: {e}")
+            self._gallery_update_pending = False
 
     def heartbeat_listener(self):
         """Listen for heartbeat messages"""
@@ -500,11 +533,12 @@ class NetworkManager:
                     last_beat = self.active_heartbeats.get(ip, 0)
                     is_alive = (now - last_beat) < 10  # Increased timeout to 10 seconds
                     
-                    # Update heartbeat status in GUI
+                    # Update heartbeat status in GUI using timer instead of after_idle
                     if ip in self.gui.heartbeat_labels:
                         color = "green" if is_alive else "red"
                         text = "🟢" if is_alive else "🔴"
-                        self.gui.root.after_idle(
+                        # Use after() with minimal delay instead of after_idle to prevent event queue saturation
+                        self.gui.root.after(10,
                             lambda ip=ip, text=text, color=color: self.update_heartbeat_safe(ip, text, color)
                         )
                 
