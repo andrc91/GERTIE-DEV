@@ -316,8 +316,7 @@ def start_local_video_stream():
                     logging.info(f"📊 LOCAL: {fps:.1f} fps, {len(frame_data)} bytes/frame, {frame_count} total frames")
                     last_log_time = current_time
                 
-                # Frame rate control
-                time.sleep(0.1)
+                # Frame rate control removed - allow native 30 FPS
                 
             except Exception as e:
                 error_count += 1
@@ -380,7 +379,7 @@ def capture_local_still():
             streaming = False
     
     if was_streaming:
-        time.sleep(3.0)
+        time.sleep(5.0)  # FIXED: Increased from 3.0 to 5.0 to ensure Picamera2 cleanup completes
         logging.info("[LOCAL] Video stream stopped - camera freed for high-res capture")
 
     try:
