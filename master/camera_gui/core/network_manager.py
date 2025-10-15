@@ -36,21 +36,28 @@ class NetworkManager:
         self.video_socket = None
         self.still_server = None
         self.active_heartbeats = {}
-        self.update_pending = {}  # Track if GUI update already queued per camera (prevents saturation)
         
-        # CRITICAL FIX: Frame rate limiting to prevent GUI saturation
-        # Slaves send at 30 fps, but GUI can only handle 1-2 fps smoothly
-        self.last_frame_time = {}  # Track when last frame was processed per camera
-        self.frame_interval_grid = 3.0  # Minimum seconds between frames in grid mode (0.33 fps)
-        self.frame_interval_exclusive = 0.5  # Minimum seconds between frames in exclusive mode (2 fps)
+        # CRITICAL FIX: Fixed-interval timer architecture for smooth GUI
+        # Replace after_idle() with scheduled timers to prevent event saturation
+        self.latest_frames = {}  # Buffer latest frame per camera
+        self.frame_timers = {}  # Active timer IDs per camera
+        self.photo_images = {}  # Reusable PhotoImage objects per camera
+        
+        # Timer intervals for smooth GUI (milliseconds)
+        self.grid_update_interval = 250  # 4 Hz update rate for grid mode
+        self.exclusive_update_interval = 67  # 15 Hz for exclusive mode
+        
+        # Frame dropping for network thread
+        self.last_frame_time = {}  # Track when last frame was accepted
+        self.frame_interval_grid = 0.25  # Accept 4 fps from network in grid mode
+        self.frame_interval_exclusive = 0.067  # Accept 15 fps in exclusive mode
         
         # INSTRUMENTATION: Performance metrics
         self.frames_received = {}  # Total frames received per camera
-        self.frames_queued = {}  # Total frames queued to GUI per camera
-        self.frames_skipped = {}  # Total frames skipped (update_pending) per camera
-        self.frames_dropped = {}  # NEW: Frames dropped due to rate limiting per camera
-        self.perf_start_time = time.time()  # When performance tracking started
-        self.last_perf_log = time.time()  # Last time performance was logged
+        self.frames_displayed = {}  # Total frames actually displayed
+        self.frames_dropped = {}  # Frames dropped by rate limiting
+        self.perf_start_time = time.time()
+        self.last_perf_log = time.time()
 
     def start_all_services(self):
         """Start all network services"""
@@ -174,21 +181,19 @@ class NetworkManager:
             logging.error(f"Video receiver setup error: {e}")
 
     def process_video_frame(self, ip, data):
-        """Process incoming video frame with aggressive rate limiting"""
+        """Process incoming video frame with frame buffering instead of queuing"""
         try:
             import io
             
             # INSTRUMENTATION: Track frames received
             if ip not in self.frames_received:
                 self.frames_received[ip] = 0
-                self.frames_queued[ip] = 0
-                self.frames_skipped[ip] = 0
+                self.frames_displayed[ip] = 0
                 self.frames_dropped[ip] = 0
                 self.last_frame_time[ip] = 0
             self.frames_received[ip] += 1
             
-            # CRITICAL FIX: Rate limit frames BEFORE decode/resize to prevent CPU waste
-            # Slaves send at 30 fps, but GUI can only handle 1-2 fps smoothly
+            # Rate limit frames BEFORE decode to save CPU
             current_time = time.time()
             is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
                            self.gui.exclusive_ip == ip)
@@ -208,59 +213,104 @@ class NetworkManager:
             # Decode image (only if frame passed rate limit)
             image = Image.open(io.BytesIO(data)).convert("RGB")
             
-            # Local camera (rep8) sends BGR data as JPEG, which decodes as RGB in correct order
-            # Remote cameras send RGB data as JPEG 
-            # No color swap needed - JPEG decoding handles this correctly
-            
-            # PERFORMANCE FIX: Resize in network thread BEFORE queuing to GUI
-            # This prevents blocking the GUI event loop with CPU-intensive resize operations
-            
-            # Pre-resize based on display mode to offload work from GUI thread
+            # Pre-resize based on display mode
             if is_exclusive:
-                # Exclusive mode: Larger preview (960x720) for manual focusing
+                # Exclusive mode: Larger preview (960x720)
                 display_image = image.resize((960, 720), Image.Resampling.BILINEAR)
             else:
                 # Grid mode: Standard preview size (320x240)
                 display_image = image.resize((320, 240), Image.Resampling.BILINEAR)
             
-            # CRITICAL FIX: Only queue GUI update if one isn't already pending
-            # This prevents Tkinter event queue saturation (240 calls/sec → ~24 calls/sec)
-            if ip in self.gui.video_labels:
-                if not self.update_pending.get(ip, False):
-                    self.update_pending[ip] = True  # Mark update as pending
-                    self.frames_queued[ip] += 1  # INSTRUMENTATION: Track queued frame
-                    self.gui.root.after_idle(
-                        lambda: self.update_video_display_safe(ip, display_image)
-                    )
-                else:
-                    # INSTRUMENTATION: Track skipped frame (update already pending)
-                    self.frames_skipped[ip] += 1
+            # NEW: Buffer frame instead of queuing GUI update
+            self.latest_frames[ip] = display_image
+            
+            # NEW: Start timer if not already running for this camera
+            if ip not in self.frame_timers and ip in self.gui.video_labels:
+                self._start_frame_timer(ip)
                 
         except Exception as e:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
-    def update_video_display_safe(self, ip, pil_image):
-        """Thread-safe video display update - receives pre-resized images from network thread"""
+    def _start_frame_timer(self, ip):
+        """Start a fixed-interval timer for this camera's updates"""
+        is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                       self.gui.exclusive_ip == ip)
+        interval = self.exclusive_update_interval if is_exclusive else self.grid_update_interval
+        
+        # Schedule the update function
+        timer_id = self.gui.root.after(interval, lambda: self._timer_update_display(ip))
+        self.frame_timers[ip] = timer_id
+
+    def _timer_update_display(self, ip):
+        """Timer-driven display update - runs at fixed interval, not event-driven"""
         try:
-            if ip in self.gui.video_labels:
-                # Performance logging only
+            # Check if we should continue updating this camera
+            if ip not in self.gui.video_labels:
+                # Camera removed, stop timer
+                if ip in self.frame_timers:
+                    del self.frame_timers[ip]
+                return
+            
+            # Check if we have a buffered frame
+            if ip in self.latest_frames:
+                pil_image = self.latest_frames[ip]
+                
+                # Reuse PhotoImage if possible, otherwise create new one
+                if ip not in self.photo_images:
+                    self.photo_images[ip] = ImageTk.PhotoImage(pil_image)
+                else:
+                    # Try to update existing PhotoImage (more efficient)
+                    try:
+                        self.photo_images[ip].paste(pil_image)
+                    except:
+                        # Fall back to creating new one if paste fails
+                        self.photo_images[ip] = ImageTk.PhotoImage(pil_image)
+                
+                # Update the label widget
+                self.gui.video_labels[ip].config(image=self.photo_images[ip], text="")
+                self.gui.video_labels[ip].image = self.photo_images[ip]  # Keep reference
+                
+                # Clear the buffer
+                del self.latest_frames[ip]
+                self.frames_displayed[ip] += 1
+                
+                # Log performance periodically
                 current_time = time.time()
-                
-                # Convert pre-resized image directly to PhotoImage (no blocking resize in GUI)
-                image_tk = ImageTk.PhotoImage(pil_image)
-                self.gui.video_labels[ip].config(image=image_tk, text="")
-                self.gui.video_labels[ip].image = image_tk  # Keep reference
-                
-                # INSTRUMENTATION: Log performance metrics periodically
                 if current_time - self.last_perf_log >= 10.0:
                     self._log_performance_metrics()
                     self.last_perf_log = current_time
-                    
+            
+            # Schedule next update
+            is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                           self.gui.exclusive_ip == ip)
+            interval = self.exclusive_update_interval if is_exclusive else self.grid_update_interval
+            timer_id = self.gui.root.after(interval, lambda: self._timer_update_display(ip))
+            self.frame_timers[ip] = timer_id
+            
         except Exception as e:
-            logging.error(f"Error updating video display for {ip}: {e}")
-        finally:
-            # CRITICAL: Clear pending flag to allow next update to be queued
-            self.update_pending[ip] = False
+            logging.error(f"Error in timer update for {ip}: {e}")
+            # Restart timer even on error
+            if ip in self.gui.video_labels:
+                is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                               self.gui.exclusive_ip == ip)
+                interval = self.exclusive_update_interval if is_exclusive else self.grid_update_interval
+                timer_id = self.gui.root.after(interval, lambda: self._timer_update_display(ip))
+                self.frame_timers[ip] = timer_id
+
+    def stop_camera_timer(self, ip):
+        """Stop the timer for a specific camera"""
+        if ip in self.frame_timers:
+            self.gui.root.after_cancel(self.frame_timers[ip])
+            del self.frame_timers[ip]
+        if ip in self.photo_images:
+            del self.photo_images[ip]
+        if ip in self.latest_frames:
+            del self.latest_frames[ip]
+
+    def stop_all_timers(self):
+        """Stop all camera timers (useful for mode changes)"""
+        for ip in list(self.frame_timers.keys()):
+            self.stop_camera_timer(ip)
 
     def _log_performance_metrics(self):
         """Log comprehensive performance metrics for debugging"""
@@ -272,25 +322,22 @@ class NetworkManager:
             logging.info("=" * 60)
             
             total_received = sum(self.frames_received.values())
-            total_queued = sum(self.frames_queued.values())
-            total_skipped = sum(self.frames_skipped.values())
-            total_dropped = sum(self.frames_dropped.values())  # Add dropped counter
+            total_displayed = sum(self.frames_displayed.values())
+            total_dropped = sum(self.frames_dropped.values())
             
             if total_received > 0:
                 drop_rate = (total_dropped / total_received) * 100
-                skip_rate = (total_skipped / total_received) * 100
-                logging.info(f"[PERF] OVERALL: Received={total_received}, Dropped={total_dropped} ({drop_rate:.1f}%), Queued={total_queued}, Skipped={total_skipped} ({skip_rate:.1f}%)")
+                display_rate = (total_displayed / total_received) * 100
+                logging.info(f"[PERF] OVERALL: Received={total_received}, Dropped={total_dropped} ({drop_rate:.1f}%), Displayed={total_displayed} ({display_rate:.1f}%)")
             
             for ip in sorted(self.frames_received.keys()):
                 received = self.frames_received[ip]
-                queued = self.frames_queued[ip]
-                skipped = self.frames_skipped[ip]
-                dropped = self.frames_dropped.get(ip, 0)  # Add dropped counter
+                displayed = self.frames_displayed[ip]
+                dropped = self.frames_dropped.get(ip, 0)
                 
-                if received > 0:
-                    fps = received / elapsed
-                    skip_rate = (skipped / received) * 100
-                    drop_rate = (dropped / received) * 100  # Calculate drop rate
+                if received > 0 and elapsed > 0:
+                    fps = displayed / elapsed
+                    drop_rate = (dropped / received) * 100
                     
                     # Get device name for logging
                     device_name = ip.replace(".", "_")
