@@ -440,8 +440,8 @@ def start_stream():
                         logging.info(f"[VIDEO] {device_name}: {actual_fps:.1f} fps, {len(frame_data)} bytes/frame")
                         last_time = current_time
                 
-                # Frame rate control
-                time.sleep(0.1)  # ~10 FPS
+                # Frame rate control removed - let camera run at native FPS (30)
+                # Display throttling handled by master GUI
                 
             except Exception as e:
                 logging.error(f"[VIDEO] Error in streaming loop for {device_name}: {e}")
