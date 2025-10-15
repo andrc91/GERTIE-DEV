@@ -39,6 +39,13 @@ class NetworkManager:
         self.frame_counters = {}  # Track frames per camera for adaptive display
         self.last_update_time = {}  # Track last GUI update time per camera for rate limiting
         self.update_pending = {}  # Track if GUI update already queued per camera (prevents saturation)
+        
+        # INSTRUMENTATION: Performance metrics
+        self.frames_received = {}  # Total frames received per camera
+        self.frames_queued = {}  # Total frames queued to GUI per camera
+        self.frames_skipped = {}  # Total frames skipped (update_pending) per camera
+        self.perf_start_time = time.time()  # When performance tracking started
+        self.last_perf_log = time.time()  # Last time performance was logged
 
     def start_all_services(self):
         """Start all network services"""
@@ -166,6 +173,13 @@ class NetworkManager:
         try:
             import io
             
+            # INSTRUMENTATION: Track frames received
+            if ip not in self.frames_received:
+                self.frames_received[ip] = 0
+                self.frames_queued[ip] = 0
+                self.frames_skipped[ip] = 0
+            self.frames_received[ip] += 1
+            
             # Decode image
             image = Image.open(io.BytesIO(data)).convert("RGB")
             
@@ -181,10 +195,13 @@ class NetworkManager:
             if ip in self.gui.video_labels:
                 if not self.update_pending.get(ip, False):
                     self.update_pending[ip] = True  # Mark update as pending
+                    self.frames_queued[ip] += 1  # INSTRUMENTATION: Track queued frame
                     self.gui.root.after_idle(
                         lambda: self.update_video_display_safe(ip, image)
                     )
-                # Else: Skip queuing - update already pending for this camera
+                else:
+                    # INSTRUMENTATION: Track skipped frame (update already pending)
+                    self.frames_skipped[ip] += 1
                 
         except Exception as e:
             logging.error(f"Error processing video frame from {ip}: {e}")
@@ -241,11 +258,58 @@ class NetworkManager:
                 image_tk = ImageTk.PhotoImage(display_image)
                 self.gui.video_labels[ip].config(image=image_tk, text="")
                 self.gui.video_labels[ip].image = image_tk  # Keep reference
+                
+                # INSTRUMENTATION: Log performance metrics periodically
+                if current_time - self.last_perf_log >= 10.0:
+                    self._log_performance_metrics()
+                    self.last_perf_log = current_time
+                    
         except Exception as e:
             logging.error(f"Error updating video display for {ip}: {e}")
         finally:
             # CRITICAL: Clear pending flag to allow next update to be queued
             self.update_pending[ip] = False
+
+    def _log_performance_metrics(self):
+        """Log comprehensive performance metrics for debugging"""
+        try:
+            elapsed = time.time() - self.perf_start_time
+            
+            logging.info("=" * 60)
+            logging.info(f"[PERF] GUI Performance Metrics (after {elapsed:.1f}s)")
+            logging.info("=" * 60)
+            
+            total_received = sum(self.frames_received.values())
+            total_queued = sum(self.frames_queued.values())
+            total_skipped = sum(self.frames_skipped.values())
+            
+            if total_received > 0:
+                queue_efficiency = (total_skipped / total_received) * 100
+                logging.info(f"[PERF] OVERALL: Received={total_received}, Queued={total_queued}, Skipped={total_skipped} ({queue_efficiency:.1f}% reduction)")
+            
+            for ip in sorted(self.frames_received.keys()):
+                received = self.frames_received[ip]
+                queued = self.frames_queued[ip]
+                skipped = self.frames_skipped[ip]
+                
+                if received > 0:
+                    fps = received / elapsed
+                    skip_rate = (skipped / received) * 100
+                    
+                    # Get device name for logging
+                    device_name = ip.replace(".", "_")
+                    if ip == "127.0.0.1":
+                        device_name = "rep8"
+                    elif ip.startswith("192.168.0."):
+                        last_octet = int(ip.split(".")[-1])
+                        device_name = f"rep{last_octet - 200}"
+                    
+                    logging.info(f"[PERF] {device_name:5s} ({ip}): {fps:4.1f} FPS | Recv={received:4d} | Queued={queued:3d} | Skipped={skipped:3d} ({skip_rate:5.1f}%)")
+            
+            logging.info("=" * 60)
+            
+        except Exception as e:
+            logging.error(f"Error logging performance metrics: {e}")
 
     def still_receiver(self):
         """Receive still images"""
