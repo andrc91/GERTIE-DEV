@@ -36,6 +36,7 @@ class NetworkManager:
         self.video_socket = None
         self.still_server = None
         self.active_heartbeats = {}
+        self.frame_counters = {}  # Track frames per camera for adaptive display
 
     def start_all_services(self):
         """Start all network services"""
@@ -183,25 +184,37 @@ class NetworkManager:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
     def update_video_display_safe(self, ip, pil_image):
-        """Thread-safe video display update with dynamic sizing for exclusive mode"""
+        """Thread-safe video display update with adaptive frame rate and fast resampling"""
         try:
             if ip in self.gui.video_labels:
-                # Check if this camera is in exclusive view mode (GUI thread = safe to check state)
+                # Initialize frame counter for this camera
+                if ip not in self.frame_counters:
+                    self.frame_counters[ip] = 0
+                
+                self.frame_counters[ip] += 1
+                
+                # Check if this camera is in exclusive view mode
                 is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
                                self.gui.exclusive_ip == ip)
                 
-                # Resize for exclusive mode if needed
+                # Adaptive frame rate: Drop frames based on mode
                 if is_exclusive:
-                    # Enlarge for manual focusing - 3x normal size
-                    display_image = pil_image.resize((960, 720), Image.Resampling.LANCZOS)
+                    # Exclusive mode: Show every 2nd frame (~15 FPS from 30 FPS source)
+                    if self.frame_counters[ip] % 2 != 0:
+                        return  # Drop frame
+                    # Enlarge for manual focusing with BILINEAR (faster than LANCZOS)
+                    display_image = pil_image.resize((960, 720), Image.Resampling.BILINEAR)
                 else:
-                    # Normal grid size - downscale from original for performance
-                    display_image = pil_image.resize((320, 240), Image.Resampling.LANCZOS)
+                    # Grid mode: Show every 6th frame (~5 FPS from 30 FPS source)
+                    if self.frame_counters[ip] % 6 != 0:
+                        return  # Drop frame
+                    # Normal grid size with BILINEAR (faster than LANCZOS)
+                    display_image = pil_image.resize((320, 240), Image.Resampling.BILINEAR)
                 
                 # Convert to PhotoImage and update label
                 image_tk = ImageTk.PhotoImage(display_image)
                 self.gui.video_labels[ip].config(image=image_tk, text="")
-                self.gui.video_labels[ip].image = image_tk  # Keep reference to prevent garbage collection
+                self.gui.video_labels[ip].image = image_tk  # Keep reference
         except Exception as e:
             logging.error(f"Error updating video display for {ip}: {e}")
 
