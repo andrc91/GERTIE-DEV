@@ -38,10 +38,17 @@ class NetworkManager:
         self.active_heartbeats = {}
         self.update_pending = {}  # Track if GUI update already queued per camera (prevents saturation)
         
+        # CRITICAL FIX: Frame rate limiting to prevent GUI saturation
+        # Slaves send at 30 fps, but GUI can only handle 1-2 fps smoothly
+        self.last_frame_time = {}  # Track when last frame was processed per camera
+        self.frame_interval_grid = 1.0  # Minimum seconds between frames in grid mode (1 fps)
+        self.frame_interval_exclusive = 0.5  # Minimum seconds between frames in exclusive mode (2 fps)
+        
         # INSTRUMENTATION: Performance metrics
         self.frames_received = {}  # Total frames received per camera
         self.frames_queued = {}  # Total frames queued to GUI per camera
         self.frames_skipped = {}  # Total frames skipped (update_pending) per camera
+        self.frames_dropped = {}  # NEW: Frames dropped due to rate limiting per camera
         self.perf_start_time = time.time()  # When performance tracking started
         self.last_perf_log = time.time()  # Last time performance was logged
 
@@ -167,7 +174,7 @@ class NetworkManager:
             logging.error(f"Video receiver setup error: {e}")
 
     def process_video_frame(self, ip, data):
-        """Process incoming video frame"""
+        """Process incoming video frame with aggressive rate limiting"""
         try:
             import io
             
@@ -176,9 +183,29 @@ class NetworkManager:
                 self.frames_received[ip] = 0
                 self.frames_queued[ip] = 0
                 self.frames_skipped[ip] = 0
+                self.frames_dropped[ip] = 0
+                self.last_frame_time[ip] = 0
             self.frames_received[ip] += 1
             
-            # Decode image
+            # CRITICAL FIX: Rate limit frames BEFORE decode/resize to prevent CPU waste
+            # Slaves send at 30 fps, but GUI can only handle 1-2 fps smoothly
+            current_time = time.time()
+            is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
+                           self.gui.exclusive_ip == ip)
+            
+            # Determine frame interval based on display mode
+            min_interval = self.frame_interval_exclusive if is_exclusive else self.frame_interval_grid
+            time_since_last = current_time - self.last_frame_time[ip]
+            
+            if time_since_last < min_interval:
+                # DROP frame early - don't waste CPU on decode/resize
+                self.frames_dropped[ip] += 1
+                return
+            
+            # Update last frame time
+            self.last_frame_time[ip] = current_time
+            
+            # Decode image (only if frame passed rate limit)
             image = Image.open(io.BytesIO(data)).convert("RGB")
             
             # Local camera (rep8) sends BGR data as JPEG, which decodes as RGB in correct order
@@ -187,10 +214,6 @@ class NetworkManager:
             
             # PERFORMANCE FIX: Resize in network thread BEFORE queuing to GUI
             # This prevents blocking the GUI event loop with CPU-intensive resize operations
-            
-            # Check if this camera is in exclusive view mode
-            is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
-                           self.gui.exclusive_ip == ip)
             
             # Pre-resize based on display mode to offload work from GUI thread
             if is_exclusive:
