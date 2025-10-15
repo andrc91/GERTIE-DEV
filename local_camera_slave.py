@@ -457,8 +457,8 @@ def capture_local_still():
             time.sleep(1.0)  # Extra safety delay
         
         logging.info("[LOCAL] Starting new streaming thread...")
-        with streaming_lock:
-            streaming = True
+        # BUGFIX: Don't set streaming=True here - let the thread set its own flag
+        # This prevents race condition where thread exits immediately due to guard check
         threading.Thread(target=start_local_video_stream, daemon=True).start()
         capture_cycle_time = time.time() - capture_start_time
         logging.info(f"[TIMING] Capture cycle COMPLETE in {capture_cycle_time:.3f}s")
