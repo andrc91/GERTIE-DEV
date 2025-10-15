@@ -112,7 +112,6 @@ class NetworkManager:
             
             # Special handling for shutdown - send multiple formats to ensure it works
             if command == "sudo poweroff":
-                time.sleep(0.1)
                 try:
                     # Send additional shutdown formats
                     for additional_cmd in ["SHUTDOWN", "poweroff"]:
@@ -121,7 +120,6 @@ class NetworkManager:
                         sock2.sendto(additional_cmd.encode(), (ip, port))
                         sock2.close()
                         logging.info(f"Sent additional shutdown command '{additional_cmd}' to {ip}:{port}")
-                        time.sleep(0.1)
                 except Exception as e:
                     logging.warning(f"Additional shutdown commands failed for {ip}: {e}")
             
