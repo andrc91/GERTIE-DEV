@@ -212,7 +212,6 @@ class MasterVideoGUI:
             # Play capture sound and capture
             self.audio.play_capture_sound()
             self.network_manager.send_command(ip, "CAPTURE_STILL")
-            time.sleep(0.1)  # Brief delay between captures
             
             # Return to previous state after capture
             prev_state = previous_states[ip]
