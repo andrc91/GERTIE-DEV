@@ -37,6 +37,7 @@ class NetworkManager:
         self.still_server = None
         self.active_heartbeats = {}
         self.frame_counters = {}  # Track frames per camera for adaptive display
+        self.last_update_time = {}  # Track last GUI update time per camera for rate limiting
 
     def start_all_services(self):
         """Start all network services"""
@@ -184,12 +185,16 @@ class NetworkManager:
             logging.error(f"Error processing video frame from {ip}: {e}")
 
     def update_video_display_safe(self, ip, pil_image):
-        """Thread-safe video display update with adaptive frame rate and fast resampling"""
+        """Thread-safe video display update with time-based rate limiting and adaptive frame rate"""
         try:
             if ip in self.gui.video_labels:
-                # Initialize frame counter for this camera
+                import time
+                
+                # Initialize frame counter and last update time for this camera
                 if ip not in self.frame_counters:
                     self.frame_counters[ip] = 0
+                if ip not in self.last_update_time:
+                    self.last_update_time[ip] = 0
                 
                 self.frame_counters[ip] += 1
                 
@@ -197,7 +202,20 @@ class NetworkManager:
                 is_exclusive = (hasattr(self.gui, 'exclusive_ip') and 
                                self.gui.exclusive_ip == ip)
                 
-                # Adaptive frame rate: Drop frames based on mode
+                # Time-based rate limiting: Only update if enough time has passed
+                current_time = time.time()
+                if is_exclusive:
+                    # Exclusive mode: Update at most every 67ms (~15 FPS)
+                    min_update_interval = 0.067
+                else:
+                    # Grid mode: Update at most every 333ms (~3 FPS for smoother GUI)
+                    min_update_interval = 0.333
+                
+                time_since_last_update = current_time - self.last_update_time[ip]
+                if time_since_last_update < min_update_interval:
+                    return  # Too soon, skip this update to prevent GUI saturation
+                
+                # Adaptive frame rate: Additional frame dropping based on mode
                 if is_exclusive:
                     # Exclusive mode: Show every 2nd frame (~15 FPS from 30 FPS source)
                     if self.frame_counters[ip] % 2 != 0:
@@ -205,11 +223,14 @@ class NetworkManager:
                     # Enlarge for manual focusing with BILINEAR (faster than LANCZOS)
                     display_image = pil_image.resize((960, 720), Image.Resampling.BILINEAR)
                 else:
-                    # Grid mode: Show every 6th frame (~5 FPS from 30 FPS source)
-                    if self.frame_counters[ip] % 6 != 0:
+                    # Grid mode: Show every 10th frame (~3 FPS from 30 FPS source)
+                    if self.frame_counters[ip] % 10 != 0:
                         return  # Drop frame
                     # Normal grid size with BILINEAR (faster than LANCZOS)
                     display_image = pil_image.resize((320, 240), Image.Resampling.BILINEAR)
+                
+                # Update timestamp BEFORE GUI update to prevent overlapping updates
+                self.last_update_time[ip] = current_time
                 
                 # Convert to PhotoImage and update label
                 image_tk = ImageTk.PhotoImage(display_image)
