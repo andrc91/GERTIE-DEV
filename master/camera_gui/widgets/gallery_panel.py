@@ -71,9 +71,28 @@ class GalleryPanel:
 
     def add_image(self, filepath, device_name, timestamp):
         """Add new image to gallery"""
+        import threading
+        
+        def generate_thumbnail():
+            """Generate thumbnail in background thread"""
+            try:
+                # Do heavy image processing in background
+                image = Image.open(filepath).resize((260, 195)).convert("RGB")
+                
+                # Schedule GUI update with ready image
+                self.canvas.after(0, lambda: self._add_thumbnail_to_gui(
+                    image, filepath, device_name, timestamp))
+            except Exception as e:
+                logging.error(f"Gallery thumbnail generation failed: {e}")
+        
+        # Start background thread for thumbnail generation
+        thread = threading.Thread(target=generate_thumbnail, daemon=True)
+        thread.start()
+    
+    def _add_thumbnail_to_gui(self, image, filepath, device_name, timestamp):
+        """Add pre-processed thumbnail to GUI (runs in GUI thread)"""
         try:
-            # Create thumbnail
-            image = Image.open(filepath).resize((260, 195)).convert("RGB")
+            # Create PhotoImage from ready image (fast)
             image_tk = ImageTk.PhotoImage(image)
             
             # Create thumbnail frame
